@@ -1,30 +1,77 @@
-import os
-import subprocess
 from pathlib import Path
+import pandas as pd
+import nibabel as nib
+import numpy as np
+import matplotlib.pyplot as plt
+
+# --- paths relative to repo root ---
+REPO_ROOT    = Path(__file__).resolve().parents[2]
+DATA_ROOT    = REPO_ROOT / "data"
+NIFTI_ROOT   = DATA_ROOT / "nifti"
+RESULTS_ROOT = REPO_ROOT / "results"
+FIGS_ROOT    = REPO_ROOT / "figs"
 
 # 1. Load prediction results (test split of 44)
-df = pd.read_csv(Path(r"C:\Users\AV75950\Documents\autorater_predictions_all.csv"))
+pred_csv = RESULTS_ROOT / "autorater" / "autorater_predictions_all.csv"
+df = pd.read_csv(pred_csv)
 
-# 2. Select the most confident AD case and the most confident CN case
-ad_row = df[df['label'] == "AD"].sort_values("autorater_prediction", ascending=False).iloc[0]
-cn_row = df[df['label'] == "CN"].sort_values("autorater_prediction", ascending=True).iloc[0]
 
-def load_mid_axial_slice(nifti_path):
+def resolve_nifti_path(path_str: str) -> Path:
+    """
+    Make nifti_path robust:
+    - If the CSV stores an absolute path, use it as-is.
+    - If it stores a relative path, interpret it relative to data/nifti.
+    """
+    p = Path(path_str)
+    if p.is_absolute():
+        return p
+    return NIFTI_ROOT / p
+
+
+def load_mid_axial_slice(nifti_path: Path) -> np.ndarray:
     """
     Load the middle axial slice from a NIfTI volume, normalize to [0,1], and return it.
     """
-    img = nib.load(nifti_path).get_fdata()
+    img = nib.load(str(nifti_path)).get_fdata()
     slice_idx = img.shape[2] // 2
     sl = img[:, :, slice_idx]
     sl = (sl - sl.min()) / (sl.max() - sl.min())
     return sl
 
+
+def format_label(h) -> str:
+    """
+    Convert H to 'AD' or 'CN'.
+    - If H is 0/1 (int or str), map 1 -> AD, 0 -> CN.
+    - Otherwise, just return the string version (e.g., already 'AD'/'CN').
+    """
+    try:
+        return "AD" if int(h) == 1 else "CN"
+    except (ValueError, TypeError):
+        return str(h)
+
+
+# 2. Select the most confident AD case and the most confident CN case
+ad_row = (
+    df[df["label"] == "AD"]
+    .sort_values("autorater_prediction", ascending=False)
+    .iloc[0]
+)
+cn_row = (
+    df[df["label"] == "CN"]
+    .sort_values("autorater_prediction", ascending=True)
+    .iloc[0]
+)
+
 # 3. Extract slices, predictions, and ground-truth labels
-ad_slice = load_mid_axial_slice(ad_row["nifti_path"])
-cn_slice = load_mid_axial_slice(cn_row["nifti_path"])
+ad_slice = load_mid_axial_slice(resolve_nifti_path(ad_row["nifti_path"]))
+cn_slice = load_mid_axial_slice(resolve_nifti_path(cn_row["nifti_path"]))
 
 ad_pred, ad_h = ad_row["autorater_prediction"], ad_row["H"]
 cn_pred, cn_h = cn_row["autorater_prediction"], cn_row["H"]
+
+ad_label = format_label(ad_h)
+cn_label = format_label(cn_h)
 
 # 4. Create figure
 fig, axes = plt.subplots(2, 3, figsize=(12, 8), constrained_layout=True)
@@ -39,29 +86,44 @@ axes[0, 1].set_ylim(0, 1)
 axes[0, 1].set_title("(B) Autorater Prediction")
 
 axes[0, 2].text(
-    0.5, 0.5,
-    f"Ground-Truth H = {'AD' if ad_h == 1 else 'CN'}",
-    fontsize=14, ha="center", va="center"
+    0.5,
+    0.5,
+    f"Ground-Truth H = {ad_label}",
+    fontsize=14,
+    ha="center",
+    va="center",
 )
 axes[0, 2].axis("off")
-axes[1, 2].set_title("(C) Ground-Truth Label")
+axes[0, 2].set_title("(C) Ground-Truth Label")
 
-# ── Second row: CN case ─────────────────────────────────────────
+# ── Second row: CN case ────────────────────────────────────────
 axes[1, 0].imshow(cn_slice, cmap="gray")
-axes[1, 0].set_title("(A) CN MRI Slice")
+axes[1, 0].set_title("(D) CN MRI Slice")
 axes[1, 0].axis("off")
 
 axes[1, 1].bar(["P(AD)"], [cn_pred], color="blue")
 axes[1, 1].set_ylim(0, 1)
-axes[1, 1].set_title("(B) Autorater Prediction")
+axes[1, 1].set_title("(E) Autorater Prediction")
 
 axes[1, 2].text(
-    0.5, 0.5,
-    f"Ground-Truth H = {'AD' if cn_h == 1 else 'CN'}",
-    fontsize=14, ha="center", va="center"
+    0.5,
+    0.5,
+    f"Ground-Truth H = {cn_label}",
+    fontsize=14,
+    ha="center",
+    va="center",
 )
 axes[1, 2].axis("off")
-axes[1, 2].set_title("(C) Ground-Truth Label")
+axes[1, 2].set_title("(F) Ground-Truth Label")
 
-plt.suptitle("Figure 3. Model prediction quality comparison: AD vs CN (example)", fontsize=16)
-plt.show()
+plt.suptitle(
+    "Figure 3. Model prediction quality comparison: AD vs CN (example)",
+    fontsize=16,
+)
+
+# Save instead of only showing (good for TMLR artifact)
+FIGS_ROOT.mkdir(parents=True, exist_ok=True)
+out_path = FIGS_ROOT / "fig_autorater_examples.png"
+plt.savefig(out_path, dpi=300)
+plt.close(fig)
+print(f"Saved figure to {out_path}")

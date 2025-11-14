@@ -4,29 +4,63 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-# 1. Load prediction results (test split of 44)
-df = pd.read_csv(Path(r"C:\Users\kimdo\Downloads\제목 없는 스프레드시트 - autorater_predictions_all.csv"))
+# --- paths relative to repo root ---
+REPO_ROOT    = Path(__file__).resolve().parents[2]
+DATA_ROOT    = REPO_ROOT / "data"
+NIFTI_ROOT   = DATA_ROOT / "nifti"
+FIGS_ROOT    = REPO_ROOT / "figs"
+RESULTS_ROOT = REPO_ROOT / "results"
+
+
+# 0. Helper: resolve NIfTI paths robustly
+def resolve_nifti_path(path_str: str) -> Path:
+    """
+    Take a path string from the CSV and return a Path.
+    If it is not absolute, interpret it as relative to NIFTI_ROOT.
+    """
+    p = Path(path_str)
+    if not p.is_absolute():
+        p = NIFTI_ROOT / p
+    return p
+
+
+# 1. Load prediction results (full-cohort autorater predictions)
+pred_csv = RESULTS_ROOT / "autorater" / "autorater_predictions_all.csv"
+df = pd.read_csv(pred_csv)
 
 # 2. Select the most confident AD case and the most confident CN case
-ad_row = df[df['label'] == "AD"].sort_values("autorater_prediction", ascending=False).iloc[0]
-cn_row = df[df['label'] == "CN"].sort_values("autorater_prediction", ascending=True).iloc[0]
+ad_row = (
+    df[df["label"] == "AD"]
+    .sort_values("autorater_prediction", ascending=False)
+    .iloc[0]
+)
+cn_row = (
+    df[df["label"] == "CN"]
+    .sort_values("autorater_prediction", ascending=True)
+    .iloc[0]
+)
 
-def load_mid_axial_slice(nifti_path):
+
+def load_mid_axial_slice(nifti_path: Path):
     """
     Load the middle axial slice from a NIfTI volume, normalize it to [0,1], and return it.
     """
-    img = nib.load(nifti_path).get_fdata()
+    img = nib.load(str(nifti_path)).get_fdata()
     slice_idx = img.shape[2] // 2
     sl = img[:, :, slice_idx]
-    sl = (sl - sl.min()) / (sl.max() - sl.min())
+    sl = (sl - sl.min()) / (sl.max() - sl.min() + 1e-8)
     return sl
 
-# 3. Extract slices, predictions, and ground-truth labels
-ad_slice = load_mid_axial_slice(ad_row["nifti_path"])
-cn_slice = load_mid_axial_slice(cn_row["nifti_path"])
 
-ad_pred, ad_h = ad_row["autorater_prediction"], ad_row["H"]
-cn_pred, cn_h = cn_row["autorater_prediction"], cn_row["H"]
+# 3. Extract slices, predictions, and ground-truth labels
+ad_nifti_path = resolve_nifti_path(ad_row["nifti_path"])
+cn_nifti_path = resolve_nifti_path(cn_row["nifti_path"])
+
+ad_slice = load_mid_axial_slice(ad_nifti_path)
+cn_slice = load_mid_axial_slice(cn_nifti_path)
+
+ad_pred, ad_h = float(ad_row["autorater_prediction"]), ad_row["H"]
+cn_pred, cn_h = float(cn_row["autorater_prediction"]), cn_row["H"]
 
 # 4. Create figure
 fig, axes = plt.subplots(2, 3, figsize=(12, 8), constrained_layout=True)
@@ -41,29 +75,43 @@ axes[0, 1].set_ylim(0, 1)
 axes[0, 1].set_title("(B) Autorater Prediction")
 
 axes[0, 2].text(
-    0.5, 0.5,
+    0.5,
+    0.5,
     f"Ground-Truth H = {'AD' if ad_h == 1 else 'CN'}",
-    fontsize=14, ha="center", va="center"
+    fontsize=14,
+    ha="center",
+    va="center",
 )
 axes[0, 2].axis("off")
 axes[0, 2].set_title("(C) Ground-Truth Label")
 
 # ── Second row: CN case ─────────────────────────────────────────
 axes[1, 0].imshow(cn_slice, cmap="gray")
-axes[1, 0].set_title("(A) CN MRI Slice")
+axes[1, 0].set_title("(D) CN MRI Slice")
 axes[1, 0].axis("off")
 
 axes[1, 1].bar(["P(AD)"], [cn_pred], color="blue")
 axes[1, 1].set_ylim(0, 1)
-axes[1, 1].set_title("(B) Autorater Prediction")
+axes[1, 1].set_title("(E) Autorater Prediction")
 
 axes[1, 2].text(
-    0.5, 0.5,
+    0.5,
+    0.5,
     f"Ground-Truth H = {'AD' if cn_h == 1 else 'CN'}",
-    fontsize=14, ha="center", va="center"
+    fontsize=14,
+    ha="center",
+    va="center",
 )
 axes[1, 2].axis("off")
-axes[1, 2].set_title("(C) Ground-Truth Label")
+axes[1, 2].set_title("(F) Ground-Truth Label")
 
-plt.suptitle("Model prediction quality comparison: AD vs CN (example)", fontsize=16)
+plt.suptitle(
+    "Model prediction quality comparison: AD vs CN (example)", fontsize=16
+)
+
+# 5. Save figure to figs/ and optionally show
+FIGS_ROOT.mkdir(parents=True, exist_ok=True)
+out_path = FIGS_ROOT / "model_ADCN_examples.png"
+plt.savefig(out_path, dpi=300)
 plt.show()
+# plt.close(fig)  # uncomment if needed
