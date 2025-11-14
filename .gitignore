@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+
+# virtual env
+.venv/
+
+# data (large / private)
+data/raw_dicom/
+data/nifti/
+data/csv/*.csv
+
+# results & figures
+results/
+figs/
+
+# models / checkpoints
+*.pt
+*.pth
