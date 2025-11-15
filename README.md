@@ -1,7 +1,6 @@
 # Bayesian Prediction-Powered Inference: Conjugate Base Model and MCMC Extensions
 
-> **“Bayesian Prediction-Powered Inference with MCMC: Methods and a Medical Imaging Case Study”**
-> by Dowoo Kim and Russell Steele
+> Anonymous TMLR submission (code artifact).
 
 The goal of this repository is to make it easy to:
 
@@ -45,17 +44,16 @@ bayesianppi-mri/
     │   ├─ model_ADCN.py       # Additional model / architecture figure script
     │   └─ fig1_pipeline.py    # NIfTI → slice → preprocessing pipeline figure
     ├─ ppi/
-    │   ├─ histogram_posterior.py           # Toy Bernoulli chain-rule coverage experiment
-    │   ├─ prior_predictive_checks.py       # Prior predictive checks for Bayesian PPI
-    │   ├─ implementaion_coverage_all.py    # Coverage & width (full cohort, Colab-oriented)
-    │   ├─ implementaion_coverage_6570.py   # Coverage & width (65–70 subset, Colab-oriented)
-    │   ├─ coverage_intervalall.py          # Plot coverage vs width (full cohort)
-    │   ├─ coverage_interval6570.py         # Plot coverage vs width (65–70 subset)
-    │   ├─ k_chain_rule.py                  # K-bin chain-rule estimator experiments
-    │   ├─ sbc.py                           # Simulation-based calibration (SBC) for PPI models
-    │   └─ age_analysis.py                  # Age-stratified performance analysis (Colab/desktop)
-    └─ utils/
-        └─ paths_example.py                 # Example of repo-relative paths (optional helper)
+        │   ├─ histogram_posterior.py           # Toy Bernoulli chain-rule coverage experiment
+        │   ├─ prior_predictive_checks.py       # Prior predictive checks for Bayesian PPI
+        │   ├─ implementaion_coverage_all.py    # Coverage & width (full cohort, Colab-oriented)
+        │   ├─ implementaion_coverage_6570.py   # Coverage & width (65–70 subset, Colab-oriented)
+        │   ├─ coverage_intervalall.py          # Plot coverage vs width (full cohort)
+        │   ├─ coverage_interval6570.py         # Plot coverage vs width (65–70 subset)
+        │   ├─ k_chain_rule.py                  # K-bin chain-rule estimator experiments
+        ├─ sbc.py                           # Simulation-based calibration (SBC) for PPI models
+        └─ age_analysis.py                  # Age-stratified performance analysis (Colab/desktop)
+
 ```
 
 > **Important:** raw MRI data and ADNI metadata are *not* included, due to licensing.
@@ -411,25 +409,4 @@ In the spirit of the TMLR reproducibility checklist, we highlight the following:
   * Toy PPI experiments run in minutes on a CPU-only machine.
   * CNN training requires a GPU for practical runtime (e.g., a single commodity GPU, such as NVIDIA RTX-series), but can be scaled down (fewer epochs, smaller batch sizes) if needed.
 
----
 
-## 9. Citing this work
-
-If you find this code useful in your own research, please consider citing the TMLR paper (citation details to be updated once available):
-
-```text
-@article{kim202Xbayesianppi,
-  title   = {Bayesian Prediction-Powered Inference: Conjugate Base Model and MCMC Extensions},
-  author  = {Kim, Dowoo and Steele, Russell},
-  journal = {Transactions on Machine Learning Research},
-  year    = {202X}
-}
-```
-
----
-
-## 10. Contact
-
-For questions, bug reports, or suggestions, please open a GitHub issue on the repository or contact the corresponding author.
-
-This repository is intended to make the Bayesian PPI methodology and the ADNI MRI case study as transparent and reproducible as permitted under the ADNI data-use agreement.
