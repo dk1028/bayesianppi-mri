@@ -65,7 +65,7 @@ def convert_all_mprage():
         print("  out dir :", output_dir)
         print("  cmd     :", " ".join(command))
 
-        # check=True → 에러 발생 시 바로 예외 던져서 실패 확인 가능
+        # check=True → When an error occurs, an exception is thrown immediately to check for failure
         subprocess.run(command, check=True)
         count += 1
 
