@@ -39,7 +39,7 @@ class MRIDataset(Dataset):
         row = self.df.loc[idx]
 
         # --- resolve NIfTI path ---
-        # row['nifti_path'] 가 절대경로면 그대로, 아니면 data/nifti 아래에 붙이기
+        # If row['nifti_path'] is an absolute path, paste it as is, otherwise, paste it under data/nifti
         nifti_path = Path(row["nifti_path"])
         if not nifti_path.is_absolute():
             nifti_path = self.nifti_root / nifti_path
@@ -87,7 +87,7 @@ def main():
     # 4) Load data, create H column, and split
     df = pd.read_csv(CSV_PATH)
 
-    # label == "AD" → 1, label == "CN" → 0 (이미 H가 있으면 덮어씌워도 무방)
+    # label == "AD" → 1, label == "CN" → 0 (If you already have H, you can overwrite it)
     df["H"] = (df["label"] == "AD").astype(int)
 
     # Train / test split stratified on H
