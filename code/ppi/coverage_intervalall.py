@@ -1,51 +1,26 @@
-import matplotlib.pyplot as plt
-import pandas as pd
+from __future__ import annotations
+
 from pathlib import Path
 
-# --- repo-relative paths ---
-REPO_ROOT = Path(__file__).resolve().parents[2]
-FIGS_ROOT = REPO_ROOT / "figs"
-FIGS_ROOT.mkdir(parents=True, exist_ok=True)
+import matplotlib.pyplot as plt
+import pandas as pd
 
-# Re-define data to exactly match the new results (do not alter structure)
-data2 = {
-    'prior': ['uniform'] * 4 + ['jeffreys'] * 4,
-    'n_labels': [10, 20, 40, 80] * 2,
+from _shared import COVERAGE_ROOT, FIGS_ROOT
 
-    # Chain-rule (CRE) coverage and width
-    'chain_cov': [1.00, 1.00, 1.00, 0.98, 1.00, 0.98, 1.00, 0.92],
-    'chain_w':   [0.382189, 0.284138, 0.189787, 0.137089, 0.389759, 0.259695, 0.183827, 0.131398],
+CSV_PATH = COVERAGE_ROOT / "coverage_all.csv"
+if not CSV_PATH.exists():
+    raise FileNotFoundError(f"Run implementaion_coverage_all.py first: {CSV_PATH} not found")
 
-    # Naive (labels-only) coverage and width
-    'naive_cov': [0.96, 0.98, 0.98, 0.98, 0.94, 0.98, 0.98, 0.94],
-    'naive_w':   [0.483521, 0.371568, 0.276416, 0.197754, 0.493258, 0.379873, 0.278419, 0.198330],
+df = pd.read_csv(CSV_PATH)
+ppi_line = df.groupby("n_labels", as_index=False)[["ppi_cov", "ppi_w"]].mean().sort_values("n_labels")
 
-    # Difference estimator coverage and width
-    'diff_cov':  [0.56, 0.88, 0.98, 0.94, 0.66, 0.80, 0.96, 0.94],
-    'diff_w':    [0.244000, 0.261050, 0.183038, 0.137787, 0.308050, 0.237025, 0.185537, 0.133275],
-}
-
-# PPI line (estimator-only; same values under both priors, so plot once)
-# Note: These are provided once for n_labels = [10, 20, 40, 80]
-ppi_n = [10, 20, 40, 80]
-ppi_cov_line = [0.96, 0.94, 0.90, 0.90]
-ppi_w_line   = [0.371070, 0.245060, 0.169302, 0.119885]
-
-df2 = pd.DataFrame(data2)
-
-# -------------------------------------------------------------------
-# 1) Coverage vs. Number of Labels
-# -------------------------------------------------------------------
 plt.figure(figsize=(10, 5))
-for prior in ['uniform', 'jeffreys']:
-    subset = df2[df2['prior'] == prior]
-    plt.plot(subset['n_labels'], subset['chain_cov'], 'o-', label=f'Chain ({prior})')   # CRE coverage
-    plt.plot(subset['n_labels'], subset['naive_cov'], 's--', label=f'Naive ({prior})')  # Naive coverage
-    plt.plot(subset['n_labels'], subset['diff_cov'], 'd-.', label=f'Diff ({prior})')    # Diff coverage
-
-# Add PPI coverage as a single line (not tied to prior)
-plt.plot(ppi_n, ppi_cov_line, '^:', label='PPI')  # PPI coverage
-
+for prior in ["uniform", "jeffreys"]:
+    subset = df[df["prior"] == prior].sort_values("n_labels")
+    plt.plot(subset["n_labels"], subset["chain_cov"], "o-", label=f"Chain ({prior})")
+    plt.plot(subset["n_labels"], subset["naive_cov"], "s--", label=f"Naive ({prior})")
+    plt.plot(subset["n_labels"], subset["diff_cov"], "d-.", label=f"Diff ({prior})")
+plt.plot(ppi_line["n_labels"], ppi_line["ppi_cov"], "^:", label="PPI")
 plt.ylim(0.4, 1.05)
 plt.xlabel("Number of Labels")
 plt.ylabel("Coverage")
@@ -53,35 +28,23 @@ plt.title("Coverage vs. Number of Labels (Full Cohort)")
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-
-# Save camera-ready versions to figs/
-plt.savefig(FIGS_ROOT / "fig_coverage_all.pdf", bbox_inches='tight')
-plt.savefig(FIGS_ROOT / "fig_coverage_all.png", dpi=300, bbox_inches='tight')
+plt.savefig(FIGS_ROOT / "fig_coverage_all.pdf", bbox_inches="tight")
+plt.savefig(FIGS_ROOT / "fig_coverage_all.png", dpi=300, bbox_inches="tight")
 plt.close()
-# plt.show()  # Uncomment if needed
 
-# -------------------------------------------------------------------
-# 2) Interval Width vs. Number of Labels
-# -------------------------------------------------------------------
 plt.figure(figsize=(10, 5))
-for prior in ['uniform', 'jeffreys']:
-    subset = df2[df2['prior'] == prior]
-    plt.plot(subset['n_labels'], subset['chain_w'], 'o-', label=f'Chain ({prior})')   # CRE width
-    plt.plot(subset['n_labels'], subset['naive_w'], 's--', label=f'Naive ({prior})')  # Naive width
-    plt.plot(subset['n_labels'], subset['diff_w'], 'd-.', label=f'Diff ({prior})')    # Diff width
-
-# Add PPI width as a single line (not tied to prior)
-plt.plot(ppi_n, ppi_w_line, '^:', label='PPI')  # PPI width
-
+for prior in ["uniform", "jeffreys"]:
+    subset = df[df["prior"] == prior].sort_values("n_labels")
+    plt.plot(subset["n_labels"], subset["chain_w"], "o-", label=f"Chain ({prior})")
+    plt.plot(subset["n_labels"], subset["naive_w"], "s--", label=f"Naive ({prior})")
+    plt.plot(subset["n_labels"], subset["diff_w"], "d-.", label=f"Diff ({prior})")
+plt.plot(ppi_line["n_labels"], ppi_line["ppi_w"], "^:", label="PPI")
 plt.xlabel("Number of Labels")
 plt.ylabel("Interval Width")
 plt.title("Interval Width vs. Number of Labels (Full Cohort)")
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-
-# Save camera-ready versions to figs/
-plt.savefig(FIGS_ROOT / "fig_width_all.pdf", bbox_inches='tight')
-plt.savefig(FIGS_ROOT / "fig_width_all.png", dpi=300, bbox_inches='tight')
+plt.savefig(FIGS_ROOT / "fig_interval_all.pdf", bbox_inches="tight")
+plt.savefig(FIGS_ROOT / "fig_interval_all.png", dpi=300, bbox_inches="tight")
 plt.close()
-# plt.show()  # Uncomment if needed

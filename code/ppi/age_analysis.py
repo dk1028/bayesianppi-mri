@@ -1,812 +1,453 @@
-import os
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
+from __future__ import annotations
 
 from pathlib import Path
-from sklearn.metrics import (
-    roc_curve, auc, roc_auc_score,
-    accuracy_score, confusion_matrix, brier_score_loss
-)
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from sklearn.calibration import calibration_curve
-from sklearn.model_selection import KFold
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    accuracy_score,
+    auc,
+    brier_score_loss,
+    confusion_matrix,
+    roc_auc_score,
+    roc_curve,
+)
+from sklearn.model_selection import KFold
 
-# --- paths relative to repo root ---
-REPO_ROOT    = Path(__file__).resolve().parents[2]
-DATA_ROOT    = REPO_ROOT / "data"
-CSV_ROOT     = DATA_ROOT / "csv"
-RESULTS_ROOT = REPO_ROOT / "results"
+from _shared import (
+    AGE_ANALYSIS_ROOT,
+    FULL_PRED_CANDIDATES,
+    META_CANDIDATES,
+    Z975,
+    choose_existing,
+    load_prediction_csv,
+    wilson_interval,
+)
 
-AGE_ANALYSIS_DIR = RESULTS_ROOT / "age_analysis"
-AGE_ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
-
-CSV_META = CSV_ROOT / "all_people_7_20_2025.csv"          # ADNI metadata
-CSV_PRED = RESULTS_ROOT / "autorater" / "autorater_predictions_all4.csv"
-OUT_DIR  = AGE_ANALYSIS_DIR / "autorater_age_analysis5"
+CSV_META = choose_existing(META_CANDIDATES)
+CSV_PRED = choose_existing(FULL_PRED_CANDIDATES)
+OUT_DIR = AGE_ANALYSIS_ROOT / "autorater_age_analysis5"
+OUT_DIR6 = AGE_ANALYSIS_ROOT / "autorater_age_analysis6"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
-
-# 추가: age6 add-ons용 서브폴더
-OUT_DIR6 = AGE_ANALYSIS_DIR / "autorater_age_analysis6"
 OUT_DIR6.mkdir(parents=True, exist_ok=True)
 
-# Age bins (right edge exclusive) — 50–73, 74–79, 80–100
-AGE_BINS    = [50, 74, 80, 101]
-AGE_LABELS  = ["50–73", "74–79", "80–100"]
-
-# If you want a standalone ROC for a specific age band (e.g., 74–79)
-AGE_BAND_FOR_ROC = (74, 80)   # [low, high)
-
-# Allowed day tolerance for nearest-date matching
+AGE_BINS = [50, 74, 80, 101]
+AGE_LABELS = ["50–73", "74–79", "80–100"]
 DATE_TOL_DAYS = 14
-
-# Number of bootstrap repetitions (for AUC CIs)
 BOOT_B = 2000
-
-# Permutation repetitions for AUC diff tests across independent bins (no DeLong)
 PERM_B = 5000
-
-# Minimum sample size to draw calibration curves
 CALIB_MIN_N = 50
+LABELED_FOR_OVERLAP = 634
+SEED = 2025
+rng = np.random.default_rng(SEED)
 
-# Global RNG
-rng = np.random.default_rng(2025)
 
-# ============================
-# 1) Load & clean data
-# ============================
-meta = pd.read_csv(CSV_META, dtype=str)
-pred = pd.read_csv(CSV_PRED, dtype=str)
-
-# Trim whitespace
-meta.columns = [c.strip() for c in meta.columns]
-pred.columns = [c.strip() for c in pred.columns]
-
-# Required columns check
-need_meta_cols = ['Subject', 'Age', 'Sex', 'Acq Date']
-for c in need_meta_cols:
-    if c not in meta.columns:
-        raise ValueError(f"[META] Missing column '{c}'. Current columns: {list(meta.columns)}")
-
-need_pred_cols = ['subject_id', 'Acq_Date', 'autorater_prediction', 'H']
-for c in need_pred_cols:
-    if c not in pred.columns:
-        raise ValueError(f"[PRED] Missing column '{c}'. Current columns: {list(pred.columns)}")
-
-# Type/date parsing
-meta['Subject'] = meta['Subject'].str.strip()
-pred['subject_id'] = pred['subject_id'].str.strip()
-
-def parse_date_series(s):
-    out = pd.to_datetime(s, errors='coerce')
+def parse_date_series(s: pd.Series) -> pd.Series:
+    out = pd.to_datetime(s, errors="coerce")
     mask = out.isna()
     if mask.any():
-        try_formats = ['%m/%d/%Y', '%m/%d/%y', '%Y-%m-%d', '%Y/%m/%d', '%m-%d-%Y', '%d/%m/%Y']
-        for fmt in try_formats:
-            out2 = pd.to_datetime(s[mask], format=fmt, errors='coerce')
+        for fmt in ["%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d", "%Y/%m/%d", "%m-%d-%Y", "%d/%m/%Y"]:
+            out2 = pd.to_datetime(s[mask], format=fmt, errors="coerce")
             out.loc[mask] = out2
             mask = out.isna()
             if not mask.any():
                 break
     return out.dt.date
 
-meta['AcqDate_std'] = parse_date_series(meta['Acq Date'])
-pred['AcqDate_std'] = parse_date_series(pred['Acq_Date'])
 
-# Numeric casting
-meta['Age'] = pd.to_numeric(meta['Age'], errors='coerce')
-pred['autorater_prediction'] = pd.to_numeric(pred['autorater_prediction'], errors='coerce')
-pred['H'] = pd.to_numeric(pred['H'], errors='coerce').astype('Int64')  # 0/1
+def auc_ci(y: np.ndarray, p: np.ndarray, b: int = BOOT_B, seed: int = SEED) -> tuple[float, float, float]:
+    local_rng = np.random.default_rng(seed)
+    auc0 = roc_auc_score(y, p)
+    boots = []
+    n = len(y)
+    for _ in range(b):
+        idx = local_rng.integers(0, n, size=n)
+        if np.unique(y[idx]).size < 2:
+            continue
+        boots.append(roc_auc_score(y[idx], p[idx]))
+    lo, hi = np.percentile(boots, [2.5, 97.5]) if boots else (np.nan, np.nan)
+    return float(auc0), float(lo), float(hi)
 
-# Optional: is_AD if 'label' exists
-if 'label' in pred.columns:
-    pred['is_AD'] = (pred['label'].astype(str).str.upper() == 'AD').astype(int)
 
-# ============================
-# 2) Matching (exact → ±14 days nearest)
-# ============================
-meta_key = meta[['Subject', 'AcqDate_std', 'Age', 'Sex']].drop_duplicates()
-merged = pred.merge(
-    meta_key,
-    left_on=['subject_id', 'AcqDate_std'],
-    right_on=['Subject', 'AcqDate_std'],
-    how='left',
-    suffixes=('', '_meta')
-)
 
-# Nearest-date matching (if needed)
-need_fill = merged['Age'].isna()
-if need_fill.any():
-    print(f"[INFO] Exact match failed rows: {need_fill.sum()} → trying nearest-date matching (±{DATE_TOL_DAYS} days)")
-    meta_grp = {
-        sid: df[['AcqDate_std', 'Age', 'Sex']]
-              .dropna(subset=['AcqDate_std'])
-              .sort_values('AcqDate_std')
-        for sid, df in meta.groupby('Subject', sort=False)
-    }
-
-    ages, sexes = [], []
-    for idx, row in merged.loc[need_fill].iterrows():
-        sid = row['subject_id']
-        d0  = row['AcqDate_std']
-        age_val, sex_val = np.nan, np.nan
-        if pd.notna(d0) and sid in meta_grp:
-            cand = meta_grp[sid]
-            diffs = cand['AcqDate_std'].apply(lambda d: abs(pd.to_datetime(d) - pd.to_datetime(d0))).dt.days
-            j = diffs.idxmin() if len(diffs) else None
-            if j is not None and diffs.loc[j] <= DATE_TOL_DAYS:
-                age_val = cand.loc[j, 'Age']
-                sex_val = cand.loc[j, 'Sex']
-        ages.append(age_val)
-        sexes.append(sex_val)
-    merged.loc[need_fill, 'Age'] = ages
-    merged.loc[need_fill, 'Sex'] = sexes
-
-# Usable data
-use = merged.dropna(subset=['Age', 'autorater_prediction', 'H']).copy()
-use['Age'] = use['Age'].astype(float)
-use['H']   = use['H'].astype(int)
-
-print(f"[INFO] Final matches: {len(use)} / {len(pred)}")
-
-# Binary autorater class (for PPI baseline etc.)
-use['A_class'] = (use['autorater_prediction'] >= 0.5).astype(int)
-
-# ============================
-# 3) Scatter: P(AD) vs Age
-# ============================
-plt.figure(figsize=(8.5, 5.2))
-colors = np.where(use['H'] == 1, 'crimson', 'royalblue')
-plt.scatter(
-    use['Age'], use['autorater_prediction'],
-    c=colors, s=16, alpha=0.55, edgecolors='none'
-)
-plt.xlabel("Age (years)")
-plt.ylabel("Autorater predicted P(AD)")
-plt.title("Predicted AD Probability vs Age (colored by H)")
-
-from matplotlib.lines import Line2D
-legend_elems = [
-    Line2D([0], [0], marker='o', color='w', label='CN (H=0)',
-           markerfacecolor='royalblue', markersize=7),
-    Line2D([0], [0], marker='o', color='w', label='AD (H=1)',
-           markerfacecolor='crimson', markersize=7),
-]
-plt.legend(handles=legend_elems, loc='lower right')
-plt.grid(alpha=0.25, linestyle='--')
-plt.tight_layout()
-plt.savefig(OUT_DIR / "fig_pred_vs_age.png", dpi=200)
-plt.close()
-
-# ============================
-# 4) ROC utility function
-# ============================
-def plot_roc(y_true, y_score, title, savepath):
+def plot_roc(y_true: np.ndarray, y_score: np.ndarray, title: str, savepath: Path, boot_seed: int) -> float:
     fpr, tpr, _ = roc_curve(y_true, y_score)
     roc_auc = auc(fpr, tpr)
+    auc0, lo, hi = auc_ci(y_true, y_score, b=BOOT_B, seed=boot_seed)
     plt.figure(figsize=(5.6, 5.6))
     plt.plot(fpr, tpr, lw=2, label=f"AUC = {roc_auc:.3f}")
-    plt.plot([0, 1], [0, 1], 'k--', lw=1)
+    plt.plot([0, 1], [0, 1], "k--", lw=1)
     plt.xlim(0, 1)
     plt.ylim(0, 1.03)
     plt.xlabel("False Positive Rate (1 - Specificity)")
     plt.ylabel("True Positive Rate (Sensitivity)")
     plt.title(title)
-    plt.legend(loc='lower right')
-    plt.grid(alpha=0.25, linestyle='--')
+    plt.legend(loc="lower right")
+    plt.text(0.98, 0.05, f"95% CI [{lo:.3f}, {hi:.3f}]", ha="right", transform=plt.gca().transAxes)
+    plt.grid(alpha=0.25, linestyle="--")
     plt.tight_layout()
     plt.savefig(savepath, dpi=200)
     plt.close()
-    return roc_auc
+    return float(auc0)
 
-# ============================
-# 5) Overall ROC
-# ============================
-auc_overall = plot_roc(
-    use['H'].values,
-    use['autorater_prediction'].values,
-    "ROC (All ages: 50–100)",
-    OUT_DIR / "fig_roc_overall.png"
-)
 
-# Specific age band ROC (optional: 74–79)
-low, high = AGE_BAND_FOR_ROC
-band_df = use[(use['Age'] >= low) & (use['Age'] < high)].copy()
-if len(band_df) >= 10 and band_df['H'].nunique() == 2:
-    auc_band = plot_roc(
-        band_df['H'].values,
-        band_df['autorater_prediction'].values,
-        f"ROC (Age {low}–{high-1})",
-        OUT_DIR / f"fig_roc_{low}_{high-1}.png"
-    )
-else:
-    auc_band = np.nan
 
-# ============================
-# 6) Age bin assignment (50–73, 74–79, 80–100)
-# ============================
-use['age_bin'] = pd.cut(
-    use['Age'],
-    bins=AGE_BINS,
-    labels=AGE_LABELS,
-    right=False,
-    include_lowest=True
-)
+def youden_threshold(y: np.ndarray, p: np.ndarray) -> float:
+    fpr, tpr, thr = roc_curve(y, p)
+    j = tpr - fpr
+    return float(thr[np.argmax(j)])
 
-# ============================
-# 7) Per-bin ROC/metrics @0.5
-# ============================
-rows = []
-for b in AGE_LABELS:
-    sub = use[use['age_bin'] == b]
-    if len(sub) < 20 or sub['H'].nunique() < 2:
-        continue
-    y = sub['H'].values
-    p = sub['autorater_prediction'].values
-    auc_b = plot_roc(
-        y, p,
-        f"ROC (Age {b})",
-        OUT_DIR / f"fig_roc_{b.replace('–', '_')}.png"
-    )
-    yhat = (p >= 0.5).astype(int)
+
+
+def threshold_metrics(y: np.ndarray, p: np.ndarray, threshold: float) -> dict[str, float]:
+    yhat = (p >= threshold).astype(int)
     acc = accuracy_score(y, yhat)
     tn, fp, fn, tp = confusion_matrix(y, yhat, labels=[0, 1]).ravel()
     tpr = tp / (tp + fn) if (tp + fn) else np.nan
     tnr = tn / (tn + fp) if (tn + fp) else np.nan
-    prev = y.mean()
-    rows.append({
-        'age_bin': b,
-        'n': len(sub),
-        'prevalence_AD': prev,
-        'AUC': auc_b,
-        'ACC@0.5': acc,
-        'TPR@0.5': tpr,
-        'TNR@0.5': tnr
-    })
+    acc_lo, acc_hi = wilson_interval(int((yhat == y).sum()), len(y))
+    tpr_lo, tpr_hi = wilson_interval(int(tp), int(tp + fn))
+    tnr_lo, tnr_hi = wilson_interval(int(tn), int(tn + fp))
+    return {
+        "ACC": float(acc),
+        "ACC_low": acc_lo,
+        "ACC_high": acc_hi,
+        "TPR": float(tpr),
+        "TPR_low": tpr_lo,
+        "TPR_high": tpr_hi,
+        "TNR": float(tnr),
+        "TNR_low": tnr_lo,
+        "TNR_high": tnr_hi,
+    }
 
-perf = pd.DataFrame(rows).sort_values('age_bin')
-perf.to_csv(OUT_DIR / "metrics_by_age.csv", index=False, encoding='utf-8-sig')
 
-# Overlay ROC by age bins
-plt.figure(figsize=(7.6, 6))
-for b in AGE_LABELS:
-    sub = use[use['age_bin'] == b]
-    if len(sub) < 20 or sub['H'].nunique() < 2:
-        continue
-    fpr, tpr, _ = roc_curve(sub['H'].values, sub['autorater_prediction'].values)
-    roc_auc = auc(fpr, tpr)
-    plt.plot(fpr, tpr, lw=1.8, label=f"{b} (AUC {roc_auc:.2f})")
-plt.plot([0, 1], [0, 1], 'k--', lw=1)
-plt.xlabel("False Positive Rate")
-plt.ylabel("True Positive Rate")
-plt.title("ROC by Age Bins (50–73, 74–79, 80–100)")
-plt.legend(loc='lower right', fontsize=9)
-plt.grid(alpha=0.25)
-plt.tight_layout()
-plt.savefig(OUT_DIR / "fig_roc_by_age_bins.png", dpi=200)
-plt.close()
 
-# ============================
-# 8) AUC 95% bootstrap CI (overall & per-bin)
-# ============================
-def auc_ci(y, p, B=2000, rng=rng):
-    y = np.asarray(y)
-    p = np.asarray(p)
-    auc0 = roc_auc_score(y, p)
-    boots = []
+def bootstrap_threshold_summary(y: np.ndarray, p: np.ndarray, b: int = 1000, seed: int = SEED) -> tuple[pd.DataFrame, np.ndarray]:
+    local_rng = np.random.default_rng(seed)
+    thresholds = []
+    metrics = []
     n = len(y)
-    for _ in range(B):
-        idx = rng.integers(0, n, size=n)
-        if len(np.unique(y[idx])) < 2:
+    for _ in range(b):
+        idx = local_rng.integers(0, n, size=n)
+        if np.unique(y[idx]).size < 2:
             continue
-        boots.append(roc_auc_score(y[idx], p[idx]))
-    if len(boots):
-        lo, hi = np.percentile(boots, [2.5, 97.5])
-    else:
-        lo, hi = (np.nan, np.nan)
-    return auc0, lo, hi
+        thr = youden_threshold(y[idx], p[idx])
+        thresholds.append(thr)
+        metrics.append(threshold_metrics(y[idx], p[idx], thr))
+    thr_arr = np.asarray(thresholds, dtype=float)
+    if len(thr_arr) == 0:
+        return pd.DataFrame(), thr_arr
+    df = pd.DataFrame(metrics)
+    summary = pd.DataFrame(
+        {
+            "mean(t)": [thr_arr.mean()],
+            "t_lo": [np.percentile(thr_arr, 2.5)],
+            "t_hi": [np.percentile(thr_arr, 97.5)],
+            "ACC_m": [df["ACC"].mean()],
+            "ACC_l": [np.percentile(df["ACC"], 2.5)],
+            "ACC_h": [np.percentile(df["ACC"], 97.5)],
+            "TPR_m": [df["TPR"].mean()],
+            "TPR_l": [np.percentile(df["TPR"], 2.5)],
+            "TPR_h": [np.percentile(df["TPR"], 97.5)],
+            "TNR_m": [df["TNR"].mean()],
+            "TNR_l": [np.percentile(df["TNR"], 2.5)],
+            "TNR_h": [np.percentile(df["TNR"], 97.5)],
+        }
+    )
+    return summary, thr_arr
 
-auc0, lo, hi = auc_ci(use['H'], use['autorater_prediction'], B=BOOT_B, rng=rng)
-print(f"\nOverall AUC = {auc0:.3f}  (95% CI {lo:.3f}–{hi:.3f})")
 
-ci_rows = []
-for b in AGE_LABELS:
-    sub = use[use['age_bin'] == b]
-    if len(sub) >= 20 and sub['H'].nunique() == 2:
-        a0, l, h = auc_ci(sub['H'], sub['autorater_prediction'], B=BOOT_B, rng=rng)
-    else:
-        a0, l, h = (np.nan, np.nan, np.nan)
-    ci_rows.append({'age_bin': b, 'AUC_CI_low': l, 'AUC_CI_high': h})
-perf_ci = perf.merge(pd.DataFrame(ci_rows), on='age_bin', how='left')
-perf_ci.to_csv(OUT_DIR / "metrics_by_age_with_auc_ci.csv", index=False, encoding='utf-8-sig')
 
-# ============================
-# 8b) Pairwise AUC differences via permutation + Holm
-# ============================
-def _auc_np(y, p):
-    y = np.asarray(y)
-    p = np.asarray(p)
-    if len(np.unique(y)) < 2:
-        return np.nan
-    return roc_auc_score(y, p)
-
-def perm_test_auc_diff(df, bin1, bin2, B=PERM_B, rng=rng):
-    """Two-sided permutation test of AUC(bin1) - AUC(bin2).
-       Null: exchangeable groups; permute group labels with sizes fixed."""
-    g1 = df[df['age_bin'] == bin1]
-    g2 = df[df['age_bin'] == bin2]
-    if (len(g1) < 20 or len(g2) < 20 or g1['H'].nunique() < 2 or g2['H'].nunique() < 2):
-        return np.nan, np.nan
-
-    y1, p1 = g1['H'].to_numpy(), g1['autorater_prediction'].to_numpy()
-    y2, p2 = g2['H'].to_numpy(), g2['autorater_prediction'].to_numpy()
-
-    auc1 = _auc_np(y1, p1)
-    auc2 = _auc_np(y2, p2)
-    if np.isnan(auc1) or np.isnan(auc2):
-        return np.nan, np.nan
-
-    obs_diff = auc1 - auc2
-
-    # pool and permute group labels while keeping labels/scores intact
-    y_all = np.concatenate([y1, y2])
-    p_all = np.concatenate([p1, p2])
-    n1 = len(y1)
-    n_all = len(y_all)
-
-    diffs = []
-    for _ in range(B):
-        idx = rng.permutation(n_all)
-        idx1 = idx[:n1]
-        idx2 = idx[n1:]
-        auc1_b = _auc_np(y_all[idx1], p_all[idx1])
-        auc2_b = _auc_np(y_all[idx2], p_all[idx2])
-        if np.isnan(auc1_b) or np.isnan(auc2_b):
-            continue
-        diffs.append(auc1_b - auc2_b)
-
-    if len(diffs) == 0:
-        return obs_diff, np.nan
-
-    diffs = np.asarray(diffs)
-    pval = (np.sum(np.abs(diffs) >= np.abs(obs_diff)) + 1.0) / (len(diffs) + 1.0)
-    return float(obs_diff), float(pval)
-
-pair_rows = []
-for i in range(len(AGE_LABELS)):
-    for j in range(i + 1, len(AGE_LABELS)):
-        b1, b2 = AGE_LABELS[i], AGE_LABELS[j]
-        d, pval = perm_test_auc_diff(use, b1, b2, B=PERM_B, rng=rng)
-        pair_rows.append({
-            'bin1': b1,
-            'bin2': b2,
-            'AUC_diff_bin1_minus_bin2': d,
-            'p_value_perm_two_sided': pval,
-            'method': 'permutation (group-label shuffle), sizes fixed'
-        })
-
-pairwise_df = pd.DataFrame(pair_rows)
-
-def holm_adjust(pvals, alpha=0.05):
-    """Holm step-down adjustment, returns adjusted p-values in original order."""
-    order = np.argsort(pvals)
+def holm_adjust(pvals: list[float]) -> list[float]:
     m = len(pvals)
-    adj = np.zeros(m, dtype=float)
-    max_so_far = 0.0
+    order = np.argsort(pvals)
+    adjusted = np.empty(m, dtype=float)
+    running = 0.0
     for rank, idx in enumerate(order):
-        factor = m - rank
-        val = min(1.0, pvals[idx] * factor)
-        max_so_far = max(max_so_far, val)
-        adj[idx] = max_so_far
-    return adj
+        val = (m - rank) * pvals[idx]
+        running = max(running, val)
+        adjusted[idx] = min(running, 1.0)
+    return adjusted.tolist()
 
-if len(pairwise_df):
-    raw = pairwise_df['p_value_perm_two_sided'].to_numpy(dtype=float)
-    if np.any(np.isnan(raw)):
-        mask = ~np.isnan(raw)
-        adj = np.full_like(raw, np.nan, dtype=float)
-        adj[mask] = holm_adjust(raw[mask])
+
+
+def perm_test_auc_diff(df: pd.DataFrame, bin1: str, bin2: str, b: int = PERM_B, seed: int = SEED) -> tuple[float, float]:
+    local_rng = np.random.default_rng(seed)
+    d1 = df[df["age_bin"] == bin1]
+    d2 = df[df["age_bin"] == bin2]
+    y1, p1 = d1["H"].to_numpy(), d1["autorater_prediction"].to_numpy()
+    y2, p2 = d2["H"].to_numpy(), d2["autorater_prediction"].to_numpy()
+    obs = roc_auc_score(y1, p1) - roc_auc_score(y2, p2)
+    pool = np.concatenate([np.c_[y1, p1], np.c_[y2, p2]], axis=0)
+    n1 = len(d1)
+    count = 0
+    for _ in range(b):
+        perm = local_rng.permutation(len(pool))
+        grp1 = pool[perm[:n1]]
+        grp2 = pool[perm[n1:]]
+        if np.unique(grp1[:, 0]).size < 2 or np.unique(grp2[:, 0]).size < 2:
+            continue
+        diff = roc_auc_score(grp1[:, 0], grp1[:, 1]) - roc_auc_score(grp2[:, 0], grp2[:, 1])
+        count += abs(diff) >= abs(obs)
+    pval = (count + 1) / (b + 1)
+    return float(obs), float(pval)
+
+
+
+def make_propensity_overlap_plot(use: pd.DataFrame) -> None:
+    work = use.copy()
+    if "is_labeled" in work.columns:
+        work["is_labeled"] = pd.to_numeric(work["is_labeled"], errors="coerce").fillna(0).astype(int)
     else:
-        adj = holm_adjust(raw)
-    pairwise_df['p_value_holm'] = adj
+        n_lab = min(LABELED_FOR_OVERLAP, len(work) // 2 if len(work) > 1 else 1)
+        labeled_idx = rng.choice(len(work), size=n_lab, replace=False)
+        work["is_labeled"] = 0
+        work.loc[labeled_idx, "is_labeled"] = 1
 
-pairwise_df.to_csv(OUT_DIR / "pairwise_auc_perm_test.csv", index=False, encoding='utf-8-sig')
+    X = work[["autorater_prediction", "Age"]].to_numpy(dtype=float)
+    y = work["is_labeled"].to_numpy(dtype=int)
+    model = LogisticRegression(max_iter=200)
+    model.fit(X, y)
+    ps = model.predict_proba(X)[:, 1]
+    auc_overlap = roc_auc_score(y, ps)
 
-# ============================
-# 9) Youden optimal threshold & metrics
-# ============================
-def youden_threshold(y, p):
-    fpr, tpr, thr = roc_curve(y, p)
-    j = tpr - fpr
-    k = np.argmax(j)
-    return thr[k], tpr[k], (1 - fpr[k])
+    summary = pd.DataFrame(
+        {
+            "R": [50],
+            "n_labeled": [int(y.sum())],
+            "N": [len(work)],
+            "AUC_mean": [float(auc_overlap)],
+        }
+    )
+    summary.to_csv(OUT_DIR6 / "propensity_auc_summary.csv", index=False)
 
-rows_thr = []
-for b in AGE_LABELS:
-    sub = use[use['age_bin'] == b]
-    if len(sub) < 20 or sub['H'].nunique() < 2:
-        continue
-    y = sub['H'].values
-    p = sub['autorater_prediction'].values
-    thr, tpr_star, tnr_star = youden_threshold(y, p)
-    yhat_star = (p >= thr).astype(int)
-    acc_star  = accuracy_score(y, yhat_star)
-    rows_thr.append({
-        'age_bin': b,
-        'thr_youden': float(thr),
-        'ACC@thr': acc_star,
-        'TPR@thr': float(tpr_star),
-        'TNR@thr': float(tnr_star),
-    })
-
-thr_df = pd.DataFrame(rows_thr).sort_values('age_bin')
-thr_df.to_csv(OUT_DIR / "metrics_by_age_youden.csv", index=False, encoding='utf-8-sig')
-
-# ============================
-# 10) Calibration curves & Brier (per-bin, only when sufficient)
-# ============================
-cal_dir = OUT_DIR / "calibration_curves"
-cal_dir.mkdir(exist_ok=True)
-
-cal_rows = []
-for b in AGE_LABELS:
-    sub = use[use['age_bin'] == b]
-    if len(sub) < CALIB_MIN_N or sub['H'].nunique() < 2:
-        continue
-    y = sub['H'].values
-    p = sub['autorater_prediction'].values
-    frac_pos, mean_pred = calibration_curve(y, p, n_bins=10, strategy='uniform')
-    bs = brier_score_loss(y, p)
-
-    plt.figure(figsize=(5.2, 5))
-    plt.plot(mean_pred, frac_pos, 'o-', label='Observed')
-    plt.plot([0, 1], [0, 1], 'k--', label='Ideal')
-    plt.xlabel("Predicted probability")
-    plt.ylabel("Observed fraction of AD")
-    plt.title(f"Calibration (Age {b})  Brier={bs:.3f}")
+    plt.figure(figsize=(6, 4))
+    plt.hist(ps[y == 1], bins=20, alpha=0.6, label="Labeled", density=True)
+    plt.hist(ps[y == 0], bins=20, alpha=0.6, label="Unlabeled", density=True)
+    plt.xlabel("Predicted propensity of being labeled")
+    plt.ylabel("Density")
+    plt.title("Propensity overlap histograms for labeled vs. unlabeled pools")
     plt.legend()
+    plt.tight_layout()
+    plt.savefig(OUT_DIR6 / "age6_propensity_hist.png", dpi=300)
+    plt.close()
+
+
+
+def main() -> None:
+    meta = pd.read_csv(CSV_META, dtype=str)
+    pred = load_prediction_csv(CSV_PRED)
+
+    meta.columns = [c.strip() for c in meta.columns]
+    required_meta = ["Subject", "Age", "Sex", "Acq Date"]
+    missing_meta = [c for c in required_meta if c not in meta.columns]
+    if missing_meta:
+        raise ValueError(f"Metadata file is missing columns: {missing_meta}")
+
+    meta["Subject"] = meta["Subject"].astype(str).str.strip()
+    pred["subject_id"] = pred.get("subject_id", pd.Series(index=pred.index, dtype=str)).astype(str).str.strip()
+    pred["Acq_Date"] = pred.get("Acq_Date", pd.Series(index=pred.index, dtype=str)).astype(str)
+
+    meta["AcqDate_std"] = parse_date_series(meta["Acq Date"])
+    pred["AcqDate_std"] = parse_date_series(pred["Acq_Date"])
+    meta["Age"] = pd.to_numeric(meta["Age"], errors="coerce")
+
+    meta_key = meta[["Subject", "AcqDate_std", "Age", "Sex"]].drop_duplicates()
+    merged = pred.merge(
+        meta_key,
+        left_on=["subject_id", "AcqDate_std"],
+        right_on=["Subject", "AcqDate_std"],
+        how="left",
+        suffixes=("", "_meta"),
+    )
+
+    need_fill = merged["Age"].isna()
+    if need_fill.any():
+        meta_grp = {
+            sid: df[["AcqDate_std", "Age", "Sex"]].dropna(subset=["AcqDate_std"]).sort_values("AcqDate_std")
+            for sid, df in meta.groupby("Subject", sort=False)
+        }
+        ages, sexes = [], []
+        for _, row in merged.loc[need_fill].iterrows():
+            sid = row["subject_id"]
+            d0 = row["AcqDate_std"]
+            age_val, sex_val = np.nan, np.nan
+            if pd.notna(d0) and sid in meta_grp:
+                cand = meta_grp[sid]
+                diffs = cand["AcqDate_std"].apply(lambda d: abs(pd.to_datetime(d) - pd.to_datetime(d0))).dt.days
+                if len(diffs):
+                    j = diffs.idxmin()
+                    if diffs.loc[j] <= DATE_TOL_DAYS:
+                        age_val = cand.loc[j, "Age"]
+                        sex_val = cand.loc[j, "Sex"]
+            ages.append(age_val)
+            sexes.append(sex_val)
+        merged.loc[need_fill, "Age"] = ages
+        merged.loc[need_fill, "Sex"] = sexes
+
+    use = merged.dropna(subset=["Age", "autorater_prediction", "H"]).copy()
+    use["Age"] = use["Age"].astype(float)
+    use["H"] = use["H"].astype(int)
+    use["A_class"] = (use["autorater_prediction"] >= 0.5).astype(int)
+    use["age_bin"] = pd.cut(use["Age"], bins=AGE_BINS, labels=AGE_LABELS, right=False, include_lowest=True)
+    print(f"[INFO] Final matches: {len(use)} / {len(pred)}")
+
+    plt.figure(figsize=(8.5, 5.2))
+    colors = np.where(use["H"] == 1, "crimson", "royalblue")
+    plt.scatter(use["Age"], use["autorater_prediction"], c=colors, s=16, alpha=0.55, edgecolors="none")
+    plt.xlabel("Age (years)")
+    plt.ylabel("Autorater predicted P(AD)")
+    plt.title("Predicted AD Probability vs Age (colored by H)")
+    plt.grid(alpha=0.25, linestyle="--")
+    plt.tight_layout()
+    plt.savefig(OUT_DIR / "fig_pred_vs_age.png", dpi=200)
+    plt.close()
+
+    plot_roc(use["H"].to_numpy(), use["autorater_prediction"].to_numpy(), "ROC (All ages: 50–100)", OUT_DIR / "fig_roc_overall.png", SEED)
+
+    plt.figure(figsize=(7.6, 6))
+    perf_rows = []
+    auc_rows = []
+    threshold_rows = []
+    for i, b in enumerate(AGE_LABELS):
+        sub = use[use["age_bin"] == b].copy()
+        if len(sub) < 20 or sub["H"].nunique() < 2:
+            continue
+        y = sub["H"].to_numpy()
+        p = sub["autorater_prediction"].to_numpy()
+        fpr, tpr, _ = roc_curve(y, p)
+        auc_b = roc_auc_score(y, p)
+        plt.plot(fpr, tpr, lw=1.8, label=f"{b} (AUC {auc_b:.2f})")
+
+        auc0, lo, hi = auc_ci(y, p, b=BOOT_B, seed=SEED + i)
+        auc_rows.append({"age_bin": b, "AUC_CI_low": lo, "AUC_CI_high": hi})
+
+        fixed = threshold_metrics(y, p, 0.5)
+        youden_t = youden_threshold(y, p)
+        youden = threshold_metrics(y, p, youden_t)
+        threshold_rows.extend(
+            [
+                {
+                    "Age bin": b,
+                    "Threshold": "t=0.5",
+                    "ACC": fixed["ACC"],
+                    "ACC_low": fixed["ACC_low"],
+                    "ACC_high": fixed["ACC_high"],
+                    "TPR": fixed["TPR"],
+                    "TPR_low": fixed["TPR_low"],
+                    "TPR_high": fixed["TPR_high"],
+                    "TNR": fixed["TNR"],
+                    "TNR_low": fixed["TNR_low"],
+                    "TNR_high": fixed["TNR_high"],
+                    "AUC": auc0,
+                    "AUC_low": lo,
+                    "AUC_high": hi,
+                },
+                {
+                    "Age bin": b,
+                    "Threshold": f"t_Y^*={youden_t:.3f}",
+                    "ACC": youden["ACC"],
+                    "ACC_low": youden["ACC_low"],
+                    "ACC_high": youden["ACC_high"],
+                    "TPR": youden["TPR"],
+                    "TPR_low": youden["TPR_low"],
+                    "TPR_high": youden["TPR_high"],
+                    "TNR": youden["TNR"],
+                    "TNR_low": youden["TNR_low"],
+                    "TNR_high": youden["TNR_high"],
+                    "AUC": auc0,
+                    "AUC_low": lo,
+                    "AUC_high": hi,
+                },
+            ]
+        )
+
+        yhat = (p >= 0.5).astype(int)
+        tn, fp, fn, tp = confusion_matrix(y, yhat, labels=[0, 1]).ravel()
+        perf_rows.append(
+            {
+                "age_bin": b,
+                "n": len(sub),
+                "prevalence_AD": float(y.mean()),
+                "AUC": float(auc0),
+                "ACC@0.5": float(accuracy_score(y, yhat)),
+                "TPR@0.5": float(tp / (tp + fn)) if (tp + fn) else np.nan,
+                "TNR@0.5": float(tn / (tn + fp)) if (tn + fp) else np.nan,
+                "Brier": float(brier_score_loss(y, p)),
+            }
+        )
+
+        if len(sub) >= CALIB_MIN_N:
+            frac_pos, mean_pred = calibration_curve(y, p, n_bins=10, strategy="uniform")
+            plt_cal = plt.figure(figsize=(5, 5))
+            plt.plot([0, 1], [0, 1], "k--", lw=1)
+            plt.plot(mean_pred, frac_pos, marker="o")
+            plt.xlabel("Mean predicted probability")
+            plt.ylabel("Fraction of positives")
+            plt.title(f"Reliability diagram ({b})")
+            plt.tight_layout()
+            plt.savefig(OUT_DIR / f"reliability_{b.replace('–', '_')}.png", dpi=200)
+            plt.close(plt_cal)
+
+    plt.plot([0, 1], [0, 1], "k--", lw=1)
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("ROC by Age Bins (50–73, 74–79, 80–100)")
+    plt.legend(loc="lower right", fontsize=9)
     plt.grid(alpha=0.25)
     plt.tight_layout()
-    plt.savefig(cal_dir / f"calibration_{b.replace('–', '_')}.png", dpi=200)
+    plt.savefig(OUT_DIR / "fig_roc_by_age_bins.png", dpi=200)
     plt.close()
 
-    cal_rows.append({'age_bin': b, 'Brier': bs})
+    perf = pd.DataFrame(perf_rows).sort_values("age_bin")
+    perf.to_csv(OUT_DIR / "metrics_by_age.csv", index=False, encoding="utf-8-sig")
+    perf_ci = perf.merge(pd.DataFrame(auc_rows), on="age_bin", how="left")
+    perf_ci.to_csv(OUT_DIR / "metrics_by_age_with_auc_ci.csv", index=False, encoding="utf-8-sig")
+    pd.DataFrame(threshold_rows).to_csv(OUT_DIR / "age_thresholds.csv", index=False)
 
-pd.DataFrame(cal_rows).to_csv(OUT_DIR / "calibration_by_age.csv", index=False, encoding='utf-8-sig')
+    perm_rows = []
+    pvals = []
+    pairs = [(AGE_LABELS[0], AGE_LABELS[1]), (AGE_LABELS[0], AGE_LABELS[2]), (AGE_LABELS[1], AGE_LABELS[2])]
+    for i, (a, b) in enumerate(pairs):
+        diff, pval = perm_test_auc_diff(use, a, b, b=PERM_B, seed=SEED + i)
+        perm_rows.append({"Comparison": f"{a} vs. {b}", "AUC diff": diff, "Adj. p": pval})
+        pvals.append(pval)
+    adj = holm_adjust(pvals)
+    for row, p in zip(perm_rows, adj):
+        row["Adj. p"] = p
+    pd.DataFrame(perm_rows).to_csv(OUT_DIR / "perm_pairwise.csv", index=False)
 
-# ============================
-# 11) Summary (main analysis)
-# ============================
-print("\n=== SUMMARY (Age analysis) ===")
-print(f"Overall AUC (50–100): {auc_overall:.3f}")
-if not np.isnan(auc_band):
-    print(f"AUC (Age {low}–{high-1}): {auc_band:.3f}")
-else:
-    print(f"AUC (Age {low}–{high-1}): NA (insufficient data)")
+    kf = KFold(n_splits=5, shuffle=True, random_state=SEED)
+    oof_rows = []
+    y_all = use["H"].to_numpy()
+    p_all = use["autorater_prediction"].to_numpy()
+    for fold, (train_idx, test_idx) in enumerate(kf.split(p_all), start=1):
+        thr = youden_threshold(y_all[train_idx], p_all[train_idx])
+        met = threshold_metrics(y_all[test_idx], p_all[test_idx], thr)
+        oof_rows.append({"Fold": fold, "t_train": thr, "ACC": met["ACC"], "TPR": met["TPR"], "TNR": met["TNR"]})
+    pd.DataFrame(oof_rows).to_csv(OUT_DIR6 / "oof_thresholds.csv", index=False)
+    leaky_thr = youden_threshold(y_all, p_all)
+    leaky_met = threshold_metrics(y_all, p_all, leaky_thr)
+    pd.DataFrame([{"Fold": "leaky_full", "t_train": leaky_thr, "ACC": leaky_met["ACC"], "TPR": leaky_met["TPR"], "TNR": leaky_met["TNR"]}]).to_csv(OUT_DIR6 / "leaky_thresholds.csv", index=False)
 
-print("\nPer-age-bin metrics @0.5 threshold:")
-if len(perf):
-    print(perf.to_string(index=False))
-else:
-    print("  (no bins had enough size or both classes)")
+    boot_summary, thr_arr = bootstrap_threshold_summary(y_all, p_all, b=1000, seed=SEED)
+    if not boot_summary.empty:
+        boot_summary.to_csv(OUT_DIR6 / "threshold_bootstrap_summary.csv", index=False)
+        plt.figure(figsize=(6, 4))
+        plt.hist(thr_arr, bins=20, edgecolor="black")
+        plt.xlabel(r"Bootstrap $t_Y^*$")
+        plt.ylabel("Count")
+        plt.title(r"Bootstrap distribution of $t_Y^*$ and operating metrics")
+        plt.tight_layout()
+        plt.savefig(OUT_DIR6 / "age6_thr_bootstrap_hist.png", dpi=300)
+        plt.close()
 
-print("\nPer-age-bin AUC 95% CI:")
-if len(perf_ci):
-    print(perf_ci[['age_bin', 'n', 'AUC', 'AUC_CI_low', 'AUC_CI_high']].to_string(index=False))
-else:
-    print("  (no bins had enough size or both classes)")
+    make_propensity_overlap_plot(use)
+    print(f"Saved outputs to {OUT_DIR} and {OUT_DIR6}")
 
-print("\nPairwise AUC differences (permutation test, two-sided) with Holm adjustment:")
-if len(pairwise_df):
-    cols = ['bin1', 'bin2', 'AUC_diff_bin1_minus_bin2', 'p_value_perm_two_sided', 'p_value_holm', 'method']
-    print(pairwise_df[cols].to_string(index=False))
-else:
-    print("  (not enough data/classes for any pair)")
 
-print("\nPer-age-bin optimal thresholds (Youden) & metrics:")
-if len(thr_df):
-    print(thr_df.to_string(index=False))
-else:
-    print("  (no bins had enough size or both classes)")
-
-print("\nFiles saved under:")
-print(f"- {OUT_DIR}")
-
-# =============================================================================
-# AGE-ANALYSIS-6 ADD-ONS (all outputs saved in OUT_DIR6)
-#   1) Frequentist PPI baseline vs CRE (real data + label-budget sims)
-#   2) OOF threshold selection (no leakage) vs leaky baseline
-#   3) Exchangeability diagnostic (L vs U separability) + IW weights
-#   4) Threshold uncertainty propagation (bootstrap)
-# =============================================================================
-
-Z975 = 1.959963984540054
-
-def ppi_analytic_estimator(sub_idx, df_all=use):
-    """g_hat = mean(A) + mean(H-A on labeled); CI via N(0, Var(A)/N + Var(H-A)/n)."""
-    A = df_all['A_class'].astype(float).values
-    N = len(A)
-    A_bar = A.mean()
-    varA  = A.var(ddof=1) if N > 1 else 0.0
-
-    sub = df_all.iloc[sub_idx]
-    R   = (sub['H'].astype(float) - sub['A_class'].astype(float)).values
-    n   = len(R)
-    r_bar = R.mean() if n > 0 else 0.0
-    varR  = R.var(ddof=1) if n > 1 else 0.0
-
-    ghat = A_bar + r_bar
-    se   = np.sqrt(varA / N + varR / n) if (N > 0 and n > 0) else 0.0
-    return ghat, (ghat - Z975*se, ghat + Z975*se)
-
-def cre_beta_estimator(sub_idx, alpha=1.0, beta=1.0, draws=4000, df_all=use, rng=rng):
-    """Analytic CRE with independent Beta posteriors + sampling for CI."""
-    # θA | data: Beta(α + NA1, β + N-NA1) using ALL A_class
-    A_all = df_all['A_class'].astype(int).values
-    N     = len(A_all)
-    NA1   = int(A_all.sum())
-    aA, bA = alpha + NA1, beta + (N - NA1)
-
-    sub = df_all.iloc[sub_idx]
-    n1 = int((sub['A_class'] == 1).sum())
-    H1 = int(sub.loc[sub['A_class'] == 1, 'H'].sum())
-    n0 = int((sub['A_class'] == 0).sum())
-    H0 = int(sub.loc[sub['A_class'] == 0, 'H'].sum())
-
-    aH1, bH1 = alpha + H1, beta + (n1 - H1)
-    aH0, bH0 = alpha + H0, beta + (n0 - H0)
-
-    θA  = rng.beta(aA,  bA,  size=draws)
-    θH1 = rng.beta(aH1, bH1, size=draws)
-    θH0 = rng.beta(aH0, bH0, size=draws)
-
-    g   = θA*θH1 + (1-θA)*θH0
-    return float(np.mean(g)), (float(np.quantile(g, 0.025)), float(np.quantile(g, 0.975)))
-
-def prevalence_estimators_overall_and_bins():
-    """Compute PPI and CRE estimators on real data (overall + age bins)."""
-    rows = []
-    for scope_name, df_scope in [('overall', use)] + [(f'age_{b}', use[use['age_bin'] == b]) for b in AGE_LABELS]:
-        if len(df_scope) == 0:
-            continue
-        idx = df_scope.index.to_numpy()
-
-        # PPI
-        m_p, (l_p, h_p) = ppi_analytic_estimator(idx)
-
-        # CRE (uniform & Jeffreys)
-        m_cu, (l_cu, h_cu) = cre_beta_estimator(idx, alpha=1.0, beta=1.0)
-        m_cj, (l_cj, h_cj) = cre_beta_estimator(idx, alpha=0.5, beta=0.5)
-
-        rows.append({
-            'scope': scope_name, 'N': len(df_scope),
-            'ppi_hat': m_p, 'ppi_lo': l_p, 'ppi_hi': h_p,
-            'cre_uniform_hat': m_cu, 'cre_uniform_lo': l_cu, 'cre_uniform_hi': h_cu,
-            'cre_jeffreys_hat': m_cj, 'cre_jeffreys_lo': l_cj, 'cre_jeffreys_hi': h_cj
-        })
-    out = pd.DataFrame(rows)
-    out.to_csv(OUT_DIR6 / "age6_prevalence_estimators_realdata.csv",
-               index=False, encoding='utf-8-sig')
-    return out
-
-realdata_est = prevalence_estimators_overall_and_bins()
-
-def simulate_ppi_vs_cre(nsim=200, label_sizes=(10, 20, 40, 80)):
-    """Simulate coverage/width for PPI vs CRE using real-data prevalence as 'truth'."""
-    g_true = use['H'].mean()
-    res = []
-    for nh in label_sizes:
-        if nh > len(use):
-            continue
-        for prior_name, a, b in [('uniform', 1.0, 1.0), ('jeffreys', 0.5, 0.5)]:
-            cov = {'ppi': 0, 'cre': 0}
-            width = {'ppi': [], 'cre': []}
-            for _ in range(nsim):
-                idx = rng.choice(len(use), size=nh, replace=False)
-                # PPI
-                m_p, (l_p, h_p) = ppi_analytic_estimator(idx)
-                cov['ppi']  += int(l_p <= g_true <= h_p)
-                width['ppi'].append(h_p - l_p)
-                # CRE
-                m_c, (l_c, h_c) = cre_beta_estimator(idx, alpha=a, beta=b, rng=rng)
-                cov['cre']  += int(l_c <= g_true <= h_c)
-                width['cre'].append(h_c - l_c)
-            res.append({
-                'n_labels': nh,
-                'prior': prior_name,
-                'ppi_cov': cov['ppi']/nsim,
-                'ppi_w': float(np.mean(width['ppi'])),
-                'cre_cov': cov['cre']/nsim,
-                'cre_w': float(np.mean(width['cre']))
-            })
-    out = pd.DataFrame(res)
-    out.to_csv(OUT_DIR6 / "age6_ppi_vs_cre_sim.csv", index=False, encoding='utf-8-sig')
-    return out
-
-sim_est = simulate_ppi_vs_cre()
-
-def oof_threshold_metrics(df_in, K=5):
-    """Train/val split per fold: choose Youden thr on train; evaluate on held-out."""
-    kf = KFold(n_splits=K, shuffle=True, random_state=2025)
-    rows = []
-    for fold, (tr, te) in enumerate(kf.split(df_in), 1):
-        trdf = df_in.iloc[tr]
-        tedf = df_in.iloc[te]
-        ytr, ptr = trdf['H'].values, trdf['autorater_prediction'].values
-        yte, pte = tedf['H'].values, tedf['autorater_prediction'].values
-        thr, tpr_star, tnr_star = youden_threshold(ytr, ptr)
-        yhat = (pte >= thr).astype(int)
-        acc = accuracy_score(yte, yhat)
-        tn, fp, fn, tp = confusion_matrix(yte, yhat, labels=[0, 1]).ravel()
-        tpr = tp/(tp+fn) if (tp+fn) else np.nan
-        tnr = tn/(tn+fp) if (tn+fp) else np.nan
-        rows.append({
-            'fold': fold,
-            'thr_train': float(thr),
-            'ACC': acc,
-            'TPR': tpr,
-            'TNR': tnr
-        })
-    oof = pd.DataFrame(rows)
-    oof.to_csv(OUT_DIR6 / "age6_oof_threshold_metrics.csv",
-               index=False, encoding='utf-8-sig')
-
-    # Leaky baseline (thr chosen on full data, evaluate on same)
-    y, p = df_in['H'].values, df_in['autorater_prediction'].values
-    thr_full, _, _ = youden_threshold(y, p)
-    yhat_full = (p >= thr_full).astype(int)
-    acc_full = accuracy_score(y, yhat_full)
-    tn, fp, fn, tp = confusion_matrix(y, yhat_full, labels=[0, 1]).ravel()
-    tpr_full = tp/(tp+fn) if (tp+fn) else np.nan
-    tnr_full = tn/(tn+fp) if (tn+fp) else np.nan
-    leak_row = pd.DataFrame([{
-        'fold': 'leaky_full',
-        'thr_train': float(thr_full),
-        'ACC': acc_full,
-        'TPR': tpr_full,
-        'TNR': tnr_full
-    }])
-    leak_row.to_csv(OUT_DIR6 / "age6_oof_threshold_metrics_leaky.csv",
-                    index=False, encoding='utf-8-sig')
-    return oof, leak_row
-
-oof_all, leak_all = oof_threshold_metrics(use)
-
-def exchangeability_and_iw(df_in, R=50, label_frac=0.3):
-    """Randomly mark a labeled subset and test L vs U separability; prep IW weights."""
-    N = len(df_in)
-    n_lab = max(20, int(label_frac * N))
-    aucs = []
-    last_weights = None
-
-    for _ in range(R):
-        lab_idx = rng.choice(N, size=n_lab, replace=False)
-        L = np.zeros(N, dtype=int)
-        L[lab_idx] = 1
-
-        X = pd.DataFrame({
-            'p': df_in['autorater_prediction'].values,
-            'age': df_in['Age'].values,
-            # encode Sex to {0,1} (fallback 0)
-            'sex': (df_in['Sex'].astype(str).str.upper()
-                    .map({'M': 1, 'MALE': 1, 'F': 0, 'FEMALE': 0})
-                    .fillna(0)).astype(float).values
-        }).values
-        yL = L
-
-        clf = LogisticRegression(max_iter=1000)
-        clf.fit(X, yL)
-        pL = clf.predict_proba(X)[:, 1]
-        aucL = roc_auc_score(yL, pL)
-        aucs.append(aucL)
-
-        # IW weights for labeled examples: w = (1-s)/s * p(x)/(1-p(x)), s = n_lab/N
-        s = n_lab / N
-        w = ((1 - s) / s) * (pL / (1 - pL + 1e-9))
-        w_lab = w[lab_idx]
-        last_weights = pd.DataFrame({
-            'idx': df_in.index[lab_idx].values,
-            'subject_id': df_in.iloc[lab_idx]['subject_id'].values,
-            'weight': w_lab
-        })
-
-    aucs = np.array(aucs)
-    auc_mean = float(np.mean(aucs))
-    lo, hi = np.quantile(aucs, [0.025, 0.975])
-    diag = pd.DataFrame([{
-        'R': R, 'n_lab': n_lab, 'N': N,
-        'AUC_mean': auc_mean,
-        'AUC_lo': float(lo),
-        'AUC_hi': float(hi)
-    }])
-    diag.to_csv(OUT_DIR6 / "age6_exchangeability_auc.csv",
-                index=False, encoding='utf-8-sig')
-
-    if last_weights is not None:
-        last_weights.to_csv(OUT_DIR6 / "age6_iw_weights_labeled.csv",
-                            index=False, encoding='utf-8-sig')
-
-    # quick histogram of propensity scores for last run
-    plt.figure(figsize=(6, 4))
-    plt.hist(pL[yL == 1], bins=20, alpha=0.6, label='Labeled', density=True)
-    plt.hist(pL[yL == 0], bins=20, alpha=0.6, label='Unlabeled', density=True)
-    plt.xlabel("Propensity p(L=1 | X)")
-    plt.ylabel("Density")
-    plt.title("Exchangeability diagnostic: propensity overlap")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(OUT_DIR6 / "age6_propensity_hist.png", dpi=200)
-    plt.close()
-
-    return diag, last_weights
-
-ex_diag, iw_last = exchangeability_and_iw(use)
-
-def threshold_bootstrap(df_in, B=2000):
-    """Bootstrap: re-fit Youden threshold each replicate; compute metric distributions."""
-    y = df_in['H'].values
-    p = df_in['autorater_prediction'].values
-    N = len(df_in)
-    accs, tprs, tnrs, thrs = [], [], [], []
-    for _ in range(B):
-        idx = rng.integers(0, N, size=N)
-        yb, pb = y[idx], p[idx]
-        thr_b, _, _ = youden_threshold(yb, pb)
-        # evaluate on original sample (if 원하면 yb/pb로 바꿔도 됨)
-        yhat_b = (p >= thr_b).astype(int)
-        accs.append(accuracy_score(y, yhat_b))
-        tn, fp, fn, tp = confusion_matrix(y, yhat_b, labels=[0, 1]).ravel()
-        tprs.append(tp/(tp+fn) if (tp+fn) else np.nan)
-        tnrs.append(tn/(tn+fp) if (tn+fp) else np.nan)
-        thrs.append(thr_b)
-
-    out = pd.DataFrame({
-        'thr': thrs,
-        'ACC': accs,
-        'TPR': tprs,
-        'TNR': tnrs
-    })
-    out.to_csv(OUT_DIR6 / "age6_thr_bootstrap_samples.csv",
-               index=False, encoding='utf-8-sig')
-
-    summ = pd.DataFrame([{
-        'thr_mean': float(np.nanmean(thrs)),
-        'thr_lo': float(np.nanpercentile(thrs, 2.5)),
-        'thr_hi': float(np.nanpercentile(thrs, 97.5)),
-        'ACC_mean': float(np.nanmean(accs)),
-        'ACC_lo': float(np.nanpercentile(accs, 2.5)),
-        'ACC_hi': float(np.nanpercentile(accs, 97.5)),
-        'TPR_mean': float(np.nanmean(tprs)),
-        'TPR_lo': float(np.nanpercentile(tprs, 2.5)),
-        'TPR_hi': float(np.nanpercentile(tprs, 97.5)),
-        'TNR_mean': float(np.nanmean(tnrs)),
-        'TNR_lo': float(np.nanpercentile(tnrs, 2.5)),
-        'TNR_hi': float(np.nanpercentile(tnrs, 97.5)),
-    }])
-    summ.to_csv(OUT_DIR6 / "age6_thr_bootstrap_summary.csv",
-                index=False, encoding='utf-8-sig')
-
-    # plot threshold distribution
-    plt.figure(figsize=(6, 4))
-    plt.hist(thrs, bins=30, alpha=0.8, density=True)
-    plt.xlabel("Youden threshold (bootstrap)")
-    plt.ylabel("Density")
-    plt.title("Threshold uncertainty (bootstrap)")
-    plt.tight_layout()
-    plt.savefig(OUT_DIR6 / "age6_thr_bootstrap_hist.png", dpi=200)
-    plt.close()
-
-    return out, summ
-
-thr_boot_samps, thr_boot_summ = threshold_bootstrap(use)
-
-print("\n=== AGE-ANALYSIS-6 ADD-ONS SAVED ===")
-print(f"- {OUT_DIR6 / 'age6_prevalence_estimators_realdata.csv'}")
-print(f"- {OUT_DIR6 / 'age6_ppi_vs_cre_sim.csv'}")
-print(f"- {OUT_DIR6 / 'age6_oof_threshold_metrics.csv'} and leaky baseline CSV")
-print(f"- {OUT_DIR6 / 'age6_exchangeability_auc.csv'}")
-print(f"- {OUT_DIR6 / 'age6_iw_weights_labeled.csv'}")
-print(f"- {OUT_DIR6 / 'age6_propensity_hist.png'}")
-print(f"- {OUT_DIR6 / 'age6_thr_bootstrap_samples.csv'}")
-print(f"- {OUT_DIR6 / 'age6_thr_bootstrap_summary.csv'}")
-print(f"- {OUT_DIR6 / 'age6_thr_bootstrap_hist.png'}")
+if __name__ == "__main__":
+    main()

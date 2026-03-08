@@ -1,31 +1,40 @@
-import numpy as np
+from __future__ import annotations
+
 import matplotlib.pyplot as plt
-from pathlib import Path
+import numpy as np
 
-# --- paths relative to repo root ---
-REPO_ROOT = Path(__file__).resolve().parents[2]
-FIGS_ROOT = REPO_ROOT / "figs"
-FIGS_ROOT.mkdir(parents=True, exist_ok=True)
+from _shared import FIGS_ROOT
 
-# Prior predictive simulation
-rng = np.random.default_rng(42)
-n = 20000
-theta_A = rng.beta(1, 1, n)
-theta_H1 = rng.beta(1, 1, n)
-theta_H0 = rng.beta(1, 1, n)
-g = theta_A * theta_H1 + (1 - theta_A) * theta_H0
+M = 10000
+SEED = 2025
 
-# Plot histogram of g
-plt.figure(figsize=(6, 4))
-plt.hist(g, bins=50, density=True)
-plt.axvline(0.5, linestyle="--")   # mean of g under the prior
-plt.xlabel(r"$g = \theta_A \theta_{H|1} + (1-\theta_A)\theta_{H|0}$")
-plt.ylabel("Density")
-plt.title("Prior predictive distribution of $g$")
-plt.tight_layout()
 
-out_path = FIGS_ROOT / "prior_predictive_checks.png"
-plt.savefig(out_path, dpi=300)
-plt.close()
+def simulate_prior(prior: str) -> np.ndarray:
+    rng = np.random.default_rng(SEED)
+    if prior.lower() == "jeffreys":
+        a = b = 0.5
+    else:
+        a = b = 1.0
+    theta_a = rng.beta(a, b, size=M)
+    theta_h1 = rng.beta(a, b, size=M)
+    theta_h0 = rng.beta(a, b, size=M)
+    return theta_a * theta_h1 + (1.0 - theta_a) * theta_h0
 
-print(f"Saved prior predictive figure to {out_path}")
+
+def main() -> None:
+    for prior in ["uniform", "jeffreys"]:
+        g = simulate_prior(prior)
+        plt.figure(figsize=(6, 4))
+        plt.hist(g, bins=50, density=True, alpha=0.85, edgecolor="black")
+        plt.xlabel("g")
+        plt.ylabel("Density")
+        plt.title(f"Prior predictive for g ({prior})")
+        plt.tight_layout()
+        out = FIGS_ROOT / f"prior_predictive_g_{prior}.png"
+        plt.savefig(out, dpi=300)
+        plt.close()
+        print(f"Saved {out}")
+
+
+if __name__ == "__main__":
+    main()
