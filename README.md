@@ -1,14 +1,14 @@
-# Bayesian Prediction-Powered Inference: Conjugate Base Model and MCMC Extensions
+# Conjugate and MCMC Bayesian Chain-Rule Prediction-Powered Inference for Binary Prevalence Estimation
 
-> Anonymous TMLR submission (code artifact).
+> Code artifact for the manuscript and preprint.
 
 The goal of this repository is to make it easy to:
 
-1. Reproduce the **toy Bayesian prediction-powered inference (PPI)** experiments.
-2. Reproduce the **ADNI MRI case study** (3D CNN autorater + PPI / CRE / Naïve / Difference estimators).
-3. Regenerate the **coverage, interval-width, and example figures** used in the manuscript.
+1. Reproduce the **conjugate Bayesian chain-rule PPI** experiments and diagnostics.
+2. Reproduce the **ADNI MRI case study** (3D CNN autorater + CRE / Naïve / Difference / prior-free analytic PPI baselines).
+3. Regenerate the **coverage, interval-width, ROC/AUC, threshold-audit, and example figures** used in the manuscript.
 
-The structure and README are written to follow common practices of other TMLR artifacts: clear layout, instructions for data access, and a minimal but complete path from raw data to final figures.
+The repository is organized so that readers can move from raw ADNI data and metadata, to matched tables, to out-of-fold (OOF) autorater predictions, and finally to prevalence inference and figures.
 
 ---
 
@@ -35,25 +35,28 @@ bayesianppi-mri/
 ├─ figs/                       # Final and intermediate figures used in the paper
 └─ code/
     ├─ autorater/
+    │   ├─ _shared.py          # Shared preprocessing / model / OOF helpers
+    │   ├─ _viz_examples.py    # Shared example-figure helpers
     │   ├─ change_dicom.py     # DICOM → NIfTI (dcm2niix wrapper)
     │   ├─ process_all.py      # Build matched CN/AD table for full cohort
     │   ├─ process_6570.py     # Build matched CN/AD table for 65–70 subset
-    │   ├─ cnn_all.py          # 3D CNN autorater (full cohort)
+    │   ├─ cnn_all.py          # 3D CNN autorater (full cohort; saves OOF predictions)
     │   ├─ cnn_6570.py         # 3D CNN autorater (65–70 subset)
+    │   ├─ process.py          # CNN architecture / processing figure helper
     │   ├─ autorater.py        # Example AD vs CN cases and bar plots
     │   ├─ model_ADCN.py       # Additional model / architecture figure script
-    │   └─ fig1_pipeline.py    # NIfTI → slice → preprocessing pipeline figure
-    ├─ ppi/
-        │   ├─ histogram_posterior.py           # Toy Bernoulli chain-rule coverage experiment
-        │   ├─ prior_predictive_checks.py       # Prior predictive checks for Bayesian PPI
-        │   ├─ implementaion_coverage_all.py    # Coverage & width (full cohort, Colab-oriented)
-        │   ├─ implementaion_coverage_6570.py   # Coverage & width (65–70 subset, Colab-oriented)
-        │   ├─ coverage_intervalall.py          # Plot coverage vs width (full cohort)
-        │   ├─ coverage_interval6570.py         # Plot coverage vs width (65–70 subset)
-        │   ├─ k_chain_rule.py                  # K-bin chain-rule estimator experiments
-        ├─ sbc.py                           # Simulation-based calibration (SBC) for PPI models
-        └─ age_analysis.py                  # Age-stratified performance analysis (Colab/desktop)
-
+    │   └─ fig1_pipeline.py    # NIfTI → crop/pad → resize → preprocessing pipeline figure
+    └─ ppi/
+        ├─ _shared.py                        # Shared CRE / baseline / CI helpers
+        ├─ histogram_posterior.py            # Conjugate Bernoulli chain-rule posterior experiment
+        ├─ prior_predictive_checks.py        # Prior predictive checks for Bayesian PPI
+        ├─ implementaion_coverage_all.py     # Coverage & width (full cohort, Colab-oriented)
+        ├─ implementaion_coverage_6570.py    # Coverage & width (65–70 subset, Colab-oriented)
+        ├─ coverage_intervalall.py           # Plot coverage vs width (full cohort)
+        ├─ coverage_interval6570.py          # Plot coverage vs width (65–70 subset)
+        ├─ k_chain_rule.py                   # K-bin chain-rule estimator experiments
+        ├─ sbc.py                            # Simulation-based calibration (SBC)
+        └─ age_analysis.py                   # Age-stratified ROC / threshold / calibration analysis
 ```
 
 > **Important:** raw MRI data and ADNI metadata are *not* included, due to licensing.
@@ -65,9 +68,9 @@ bayesianppi-mri/
 
 The repository contains three main components that correspond to the manuscript:
 
-1. **Toy PPI experiments** (no ADNI data needed)
+1. **Conjugate Bayesian chain-rule PPI experiments and diagnostics**
 
-   * `code/ppi/histogram_posterior.py` implements a simple Bernoulli PPI experiment.
+   * `code/ppi/histogram_posterior.py` implements a simple Bernoulli chain-rule posterior experiment using **direct conjugate Beta sampling**.
    * `code/ppi/prior_predictive_checks.py` runs prior predictive checks for the Bayesian chain-rule model.
    * `code/ppi/k_chain_rule.py` and `code/ppi/sbc.py` explore K-bin chain-rule estimators and SBC.
 
@@ -75,13 +78,14 @@ The repository contains three main components that correspond to the manuscript:
 
    * `code/autorater/change_dicom.py` converts ADNI DICOMs to NIfTI using `dcm2niix`.
    * `code/autorater/process_all.py` and `process_6570.py` join the ADNI metadata CSV with NIfTI paths.
-   * `code/autorater/cnn_all.py` and `cnn_6570.py` train a 3D CNN autorater for CN vs AD classification.
+   * `code/autorater/cnn_all.py` and `cnn_6570.py` train a lightweight 3D CNN autorater for CN vs AD classification.
+   * The full-cohort autorater workflow is designed to save **out-of-fold (OOF)** predicted probabilities for downstream threshold and prevalence analyses.
 
 3. **Coverage/interval-width and age-stratified analyses**
 
-   * `code/ppi/implementaion_coverage_all.py` and `implementaion_coverage_6570.py` run coverage simulations using autorater predictions and clinician labels.
-   * `code/ppi/coverage_intervalall.py` and `coverage_interval6570.py` recreate the coverage/width plots.
-   * `code/ppi/age_analysis.py` examines AUC and ROC curves by age band (e.g., 50–73, 74–79, 80–100).
+   * `code/ppi/implementaion_coverage_all.py` and `implementaion_coverage_6570.py` run **repeated-labeling resampling** experiments using autorater predictions and clinician labels.
+   * `code/ppi/coverage_intervalall.py` and `coverage_interval6570.py` recreate the coverage/width plots by **reading generated CSV summaries** (rather than plotting hard-coded numbers).
+   * `code/ppi/age_analysis.py` examines ROC/AUC, threshold selection, calibration, and overlap diagnostics by age band (e.g. 50–73, 74–79, 80–100).
 
 Each script’s purpose is documented in its docstring and in the sections below.
 
@@ -99,14 +103,14 @@ pip install -r requirements.txt
 
 The main dependencies (exact versions may be pinned in `requirements.txt`) are:
 
-* `numpy`, `scipy`, `pandas`, `matplotlib`, `seaborn`
-* `torch`, `torchvision`, possibly `monai` (depending on the final CNN implementation)
-* `pymc>=5` (for MCMC-based Bayesian inference; chain-rule estimator implementation)
-* `scikit-learn` (ROC, AUC, calibration curves)
+* `numpy`, `scipy`, `pandas`, `matplotlib`
+* `torch`, `torchvision`
+* `pymc>=5` (used for non-conjugate extensions; the main base CRE experiments do **not** require MCMC)
+* `scikit-learn` (ROC, AUC, calibration curves, overlap diagnostics)
 * `tqdm` for progress bars
 * `nibabel`, `scikit-image` for MRI loading and preprocessing
 
-> **Note:** Toy PPI experiments (`histogram_posterior.py`, `prior_predictive_checks.py`, `k_chain_rule.py`, `sbc.py`) only require PyMC, NumPy, SciPy, Matplotlib and do not depend on PyTorch or MRI data.
+> **Note:** the base chain-rule experiments and the main coverage scripts use **direct conjugate Beta sampling** for the core Bayesian estimator. PyMC is retained for non-conjugate extensions and optional exploratory scripts.
 
 ---
 
@@ -197,13 +201,13 @@ cd bayesianppi-mri
 python code/autorater/cnn_all.py
 ```
 
-all file input/output is resolved relative to the repository root, and you do **not** need to change `C:\...` style absolute paths.
+all file input/output is resolved relative to the repository root, and you do **not** need to change absolute paths manually.
 
 ---
 
 ## 6. How to run the experiments
 
-### 6.1. Toy PPI experiments (no ADNI required)
+### 6.1. Conjugate Bayesian chain-rule experiments (no ADNI required)
 
 These are the simplest to reproduce and do not require any medical data.
 
@@ -217,9 +221,8 @@ These are the simplest to reproduce and do not require any medical data.
    This script:
 
    * Simulates multiple datasets under a Bernoulli chain-rule model with known true parameters.
-   * Fits the Bayesian chain-rule model using PyMC.
-   * Computes empirical coverage of 95% credible intervals.
-   * Plots histograms of posterior means and medians of the target quantity.
+   * Uses **conjugate Beta posterior updates** (rather than MCMC) for the base estimator.
+   * Computes interval summaries and plots histograms of posterior means / medians of the target quantity.
 
 2. **Prior predictive checks** (`prior_predictive_checks.py`)
 
@@ -239,7 +242,7 @@ These are the simplest to reproduce and do not require any medical data.
    python code/ppi/k_chain_rule.py --outdir results/coverage/k_chain_rule
    ```
 
-   This script explores how the number of bins (K) affects the chain-rule estimator’s behaviour, using conjugate Dirichlet–Beta updates and simulated predictions.
+   This script explores how the number of bins (K) affects the chain-rule estimator’s behaviour, using conjugate Dirichlet–Beta updates.
 
 4. **Simulation-based calibration** (`sbc.py`)
 
@@ -247,7 +250,7 @@ These are the simplest to reproduce and do not require any medical data.
    python code/ppi/sbc.py --outdir results/coverage/sbc
    ```
 
-   This script runs SBC experiments to check whether the Bayesian PPI models are well-calibrated, using rank histograms and diagnostic summaries.
+   This script runs SBC experiments to check whether the conjugate Bayesian chain-rule model is well calibrated, using rank histograms and diagnostic summaries.
 
 ### 6.2. DICOM → NIfTI conversion (optional, ADNI)
 
@@ -287,7 +290,7 @@ These scripts:
   * `data/csv/matched_cn_ad_labels_all.csv`
   * `data/csv/matched_cn_ad_labels_6570.csv`
 
-These matched tables are the main inputs to the CNN and PPI coverage scripts.
+These matched tables are the main inputs to the CNN and prevalence scripts.
 
 ### 6.4. Train the CNN autorater
 
@@ -308,43 +311,41 @@ Each script:
 
 * Loads the corresponding matched CSV from `data/csv/`.
 * Loads 3D NIfTI volumes from `data/nifti/`.
-* Trains a 3D CNN (using PyTorch) to predict AD vs CN.
+* Trains a lightweight 3D CNN (using PyTorch) to predict AD vs CN.
 * Saves autorater predictions and (optionally) model checkpoints to `results/autorater/`.
 
-The PPI coverage experiments use these autorater predictions as the “machine learning predictor” (A) in the chain-rule estimator.
+The full-cohort pipeline is designed so that the exported prediction CSV used downstream corresponds to **out-of-fold predicted probabilities**, which are then used for threshold selection, calibration, and prevalence estimation.
 
 ### 6.5. Coverage and interval-width experiments (ADNI-based)
 
-The scripts `implementaion_coverage_all.py` and `implementaion_coverage_6570.py` were originally written in a Colab style (with some `!pip` commands). In this repository, we keep them as standalone scripts, but recommend running them either:
-
-* In a local Python environment after ensuring all dependencies are installed, **or**
-* In Google Colab (by uploading the script and mounting the repository or copying paths).
+The scripts `implementaion_coverage_all.py` and `implementaion_coverage_6570.py` are written in a Colab-friendly style, but can also be run locally once dependencies and paths are configured.
 
 ```bash
 cd bayesianppi-mri
 
-# Full cohort coverage
+# Full cohort coverage / width
 python code/ppi/implementaion_coverage_all.py
 
-# 65–70 coverage
+# 65–70 subset coverage / width
 python code/ppi/implementaion_coverage_6570.py
 ```
 
 These scripts:
 
 * Read autorater predictions and clinician labels.
-* Implement the Bayesian PPI chain-rule estimator, Naïve estimator, and Difference estimator.
-* For several label budgets (e.g. n = 10, 20, 40, 80), estimate coverage and average width of 95% intervals.
-* Save summary tables to `results/coverage/`.
+* Implement the conjugate Bayesian chain-rule estimator (CRE), labeled-only Bayesian baseline, Difference estimator, and prior-free analytic PPI baseline.
+* For label budgets such as `n = 10, 20, 40, 80`, run **repeated-labeling resampling** with the cohort prevalence treated as the finite-population target.
+* Use `M=500` replications in the main coverage experiments.
+* Save summary tables to `results/coverage/` (or to the configured output directory in Colab).
 
-Once the coverage tables are available, you can regenerate the figures with:
+Once the coverage tables are available, regenerate the figures with:
 
 ```bash
 python code/ppi/coverage_intervalall.py
 python code/ppi/coverage_interval6570.py
 ```
 
-The plotting scripts use the reported summary numbers (either hard-coded or loaded from CSV) to reproduce the coverage vs width figures in the paper.
+The plotting scripts now read the generated CSV summaries directly and recreate the coverage / width figures without relying on hard-coded values.
 
 ### 6.6. Age-stratified analysis
 
@@ -360,7 +361,8 @@ It:
 * Joins autorater predictions with ADNI metadata.
 * Splits the cohort into pre-defined age bands (e.g. 50–73, 74–79, 80–100).
 * Computes ROC curves, AUC, and confidence intervals in each age band.
-* Optionally performs permutation tests to compare performance across bands.
+* Performs threshold analysis (fixed `t=0.5`, Youden cut-point, OOF vs leaky comparison).
+* Produces calibration summaries and overlap diagnostics.
 * Saves intermediate results and plots under `results/age_analysis/` and `figs/`.
 
 ---
@@ -369,44 +371,44 @@ It:
 
 The following scripts are used to recreate figures in the manuscript:
 
-* `code/autorater/fig1_pipeline.py` – data-processing pipeline figure: NIfTI → slice → preprocessing.
+* `code/autorater/fig1_pipeline.py` – preprocessing pipeline figure: NIfTI → crop/pad → resize → normalization.
 * `code/autorater/autorater.py` – example AD vs CN volumes and autorater outputs.
 * `code/autorater/model_ADCN.py` – CNN architecture / model diagram.
+* `code/autorater/process.py` – updated processing / architecture figure helper.
 * `code/ppi/coverage_intervalall.py` – coverage vs width (full cohort).
 * `code/ppi/coverage_interval6570.py` – coverage vs width (65–70 subset).
+* `code/ppi/age_analysis.py` – ROC / age-band / threshold-audit figures.
 
-Each script writes `.png` (or `.pdf`) files to the `figs/` directory.
+Each script writes `.png` and/or `.pdf` files to the `figs/` directory (or to the configured results folder in Colab).
 
 ---
 
 ## 8. Reproducibility checklist (informal)
 
-In the spirit of the TMLR reproducibility checklist, we highlight the following:
+In the spirit of a reproducibility checklist, we highlight the following:
 
 * **Environment:**
 
-  * We developed and tested the code with Python 3.11 on a Linux environment, and also on Windows 10 using Git Bash.
-  * `requirements.txt` lists all Python dependencies.
+  * We developed and tested the code primarily with Python 3.11.
+  * `requirements.txt` lists the Python dependencies.
 
 * **Randomness & seeds:**
 
-  * Toy PPI scripts (`histogram_posterior.py`, `prior_predictive_checks.py`, `k_chain_rule.py`, `sbc.py`) set random seeds where appropriate for repeatable simulations.
+  * Conjugate chain-rule scripts (`histogram_posterior.py`, `prior_predictive_checks.py`, `k_chain_rule.py`, `sbc.py`) set random seeds where appropriate for repeatable simulations.
   * CNN training scripts may include a fixed seed for PyTorch, but exact weight realizations can still vary across hardware and CuDNN versions.
 
 * **Data availability:**
 
-  * Toy experiments are fully self-contained.
+  * Base diagnostics and conjugate experiments are self-contained.
   * ADNI-based experiments require access to ADNI MRI and metadata, which we do not redistribute.
-  * We document exactly how the ADNI metadata CSV is constructed via Advanced Search (Project/Phase/Modality/Image Description filters).
+  * We document how the ADNI metadata CSV is constructed via Advanced Search (Project / Phase / Modality / Image Description filters).
 
 * **Code completeness:**
 
-  * All main experiments described in the paper are covered by scripts in `code/autorater` and `code/ppi`.
-  * For ADNI, we provide the full path from the Advanced Search CSV and DICOM images to matched label tables, autorater predictions, coverage estimates, and final figures.
+  * All main experiments described in the manuscript are covered by scripts in `code/autorater` and `code/ppi`.
+  * For ADNI, we provide the full path from the Advanced Search CSV and DICOM images to matched label tables, OOF autorater predictions, repeated-labeling prevalence estimation, and final figures.
 
 * **Compute:**
 
-  * Toy PPI experiments run in minutes on a CPU-only machine.
-  * CNN training requires a GPU for practical runtime (e.g., a single commodity GPU, such as NVIDIA RTX-series), but can be scaled down (fewer epochs, smaller batch sizes) if needed.
-
-
+  * Base PPI diagnostics and coverage scripts run on CPU-only machines.
+  * CNN training is much more practical on a GPU, but can be scaled down (fewer epochs, smaller batch sizes) if needed.
