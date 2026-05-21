@@ -19,7 +19,7 @@ We assume the repository is cloned as `bayesianppi-mri/`.
 ```text
 bayesianppi-mri/
 ├─ paper/
-│   └─ tmlr_bayesianppi_final.pdf
+│   └─ tmlr_bayesianppi_arxiv.pdf
 ├─ data/
 │   ├─ raw_dicom/              # ADNI DICOM (user-supplied, not tracked)
 │   ├─ nifti/                  # NIfTI volumes (dcm2niix output; not tracked)
