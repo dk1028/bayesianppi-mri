@@ -1,0 +1,48 @@
+project:
+  name: bayesianppi-mri
+  analysis_version: tmlr-revision-2026
+
+autorater:
+  seed: 42
+  folds: 5
+  grouping_column: subject_id
+  label_column: H
+  batch_size: 2
+  epochs: 5
+  learning_rate: 0.0001
+  target_shape: [64, 64, 64]
+  threshold: 0.5
+
+coverage:
+  seed: 2025
+  nsim: 500
+  label_sizes: [10, 20, 40, 80]
+  posterior_draws: 5000
+  bootstrap_resamples: 1000
+  priors:
+    uniform: [1.0, 1.0]
+    jeffreys: [0.5, 0.5]
+
+case_study:
+  age_bins: [50, 74, 80, 101]
+  age_labels: ["50-73", "74-79", "80-100"]
+  exact_age_subset: [65, 70]
+  auc_bootstrap: 2000
+  permutations: 5000
+  threshold_bootstrap: 2000
+  seed: 2025
+
+kbin:
+  k_values: [2, 4, 5]
+  strategy: quantile
+  posterior_draws: 10000
+  seed: 2025
+
+sbc:
+  M: 500
+  S: 1000
+  NA: 2116
+  NH: 100
+  bins: 20
+  priors: [jeffreys, uniform]
+  seed: 2025

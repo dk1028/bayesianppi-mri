@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite the accompanying manuscript."
+title: "Bayesian Chain-Rule Prediction-Powered Inference for Binary Prevalence Estimation"
+type: software
+version: 0.2.0
+date-released: 2026-07-07
+repository-code: "https://github.com/dk1028/bayesianppi-mri"
+authors:
+  - family-names: Kim
+    given-names: Dowoo
+    email: dowoo.kim@mail.mcgill.ca
+  - family-names: Steele
+    given-names: Russell J.
+license: MIT

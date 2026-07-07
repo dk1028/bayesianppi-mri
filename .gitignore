@@ -1,19 +1,37 @@
 # Python
 __pycache__/
-*.pyc
-
-# virtual env
+*.py[cod]
+*.so
+.pytest_cache/
+.ipynb_checkpoints/
 .venv/
+venv/
+.env
+.DS_Store
 
-# data (large / private)
+# ADNI raw and derived participant-level data
 data/raw_dicom/
 data/nifti/
 data/csv/*.csv
+!data/example/*.csv
 
-# results & figures
-results/
-figs/
+# Participant-level and local prediction tables
+results/autorater/*.csv
+results/autorater/*.json
+results/autorater/*.pt
+results/autorater/*.pth
+**/*subject_oof*.csv
+**/matched_cn_ad_labels*.csv
+**/all_people*.csv
 
-# models / checkpoints
-*.pt
-*.pth
+# Local experiment outputs; reference summaries remain tracked
+results/coverage/
+results/case_study/
+results/kbin/
+results/sbc/
+figs/generated/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
