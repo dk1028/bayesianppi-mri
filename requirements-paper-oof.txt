@@ -1,0 +1,9 @@
+# Versions explicitly recorded by the supplied MRI training notebook.
+# Install a platform-compatible PyTorch wheel; GPU behavior remains hardware-dependent.
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.5.1
+nibabel==5.3.2
+torch==2.5.1
+tqdm==4.68.3
+# The original notebook did not record a full lockfile for downstream SciPy.

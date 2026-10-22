@@ -43,6 +43,8 @@ def run_sbc_cre(
     prior: str,
     seed: int,
 ) -> tuple[dict[str, np.ndarray], pd.DataFrame]:
+    if not 0 < NH <= NA:
+        raise ValueError("SBC requires 0 < NH <= NA for a labeled subset of the pool")
     rng = np.random.default_rng(seed)
     pp = prior_params(prior)
     ranks = {name: np.empty(M, dtype=int) for name in ["thetaA", "thetaH1", "thetaH0", "g"]}
@@ -54,15 +56,19 @@ def run_sbc_cre(
         thetaH0 = rng.beta(pp["a0"], pp["b0"])
         g_true = thetaA * thetaH1 + (1 - thetaA) * thetaH0
 
-        A_unlab = rng.binomial(1, thetaA, size=NA)
-        A_lab = rng.binomial(1, thetaA, size=NH)
+        # The observed pool includes the labeled rows, as in Proposition 1.
+        # Do not simulate a separate labeled A sample and then omit its
+        # contribution from the thetaA likelihood.
+        A_pool = rng.binomial(1, thetaA, size=NA)
+        labeled_idx = rng.choice(NA, size=NH, replace=False)
+        A_lab = A_pool[labeled_idx]
         H_lab = np.where(
             A_lab == 1,
             rng.binomial(1, thetaH1, size=NH),
             rng.binomial(1, thetaH0, size=NH),
         )
 
-        nA = int(A_unlab.sum())
+        nA = int(A_pool.sum())
         n11 = int(np.sum((A_lab == 1) & (H_lab == 1)))
         n10 = int(np.sum((A_lab == 1) & (H_lab == 0)))
         n01 = int(np.sum((A_lab == 0) & (H_lab == 1)))
@@ -173,6 +179,7 @@ def main() -> None:
             seed=args.seed + (0 if prior == "jeffreys" else 100000),
         )
         truths.to_csv(prior_dir / f"sbc_truth_counts_{prior}.csv", index=False)
+        pd.DataFrame(ranks).to_csv(prior_dir / f"sbc_ranks_{prior}.csv", index=False)
 
         for parameter, values in ranks.items():
             fig_path = prior_fig / f"sbc_{parameter}_{prior}_b{args.bins}.png"

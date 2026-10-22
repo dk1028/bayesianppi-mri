@@ -24,6 +24,12 @@ results/autorater/*.pth
 **/matched_cn_ad_labels*.csv
 **/all_people*.csv
 
+# Public aggregate tables; these contain no participant-level prediction rows.
+!results/reference/coverage_all_subject_oof_scan_age.csv
+!results/reference/coverage_6570_subject_oof_scan_age.csv
+!results/reference/pairwise_auc_perm_test_subject_oof.csv
+!results/reference/prevalence_estimators_realdata_subject_oof_scan_age.csv
+
 # Local experiment outputs; reference summaries remain tracked
 results/coverage/
 results/case_study/

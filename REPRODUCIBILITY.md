@@ -66,3 +66,16 @@ Then compare generated outputs to `results/reference/` with:
 ```bash
 python scripts/check_reference_results.py --results-root results
 ```
+
+
+## Camera-ready reconciliation (2026-10-21)
+
+The supplied original MRI notebook is the authority for preprocessing: resize the NIfTI directly to 64 cubed by trilinear interpolation, then use `(image - image.mean()) / (image.std() + 1e-5)`. Do not use the earlier patch's crop/pad and min-max pipeline to claim reproduction of the supplied OOF table. Training uses BCEWithLogitsLoss and prediction applies sigmoid. cuDNN deterministic/benchmark flags match the original notebook. No MRI training was rerun while preparing this package.
+
+`coverage_experiment.py` exports four summary CSVs, one per cohort and prior. The complete repeated-labeling notebook was rerun on the provided fixed OOF predictions with its original settings. The previous Uniform summary CSVs agree exactly at full precision, and all 328 visible numeric notebook output cells match their saved output precision. The original notebook did not contain a complete dependency lockfile. Versions recorded in its installation output are provided in `requirements-paper-oof.txt`; use the fixed OOF prediction table for exact downstream reproduction.
+
+For small label budgets, PPI and scalar power-tuned PPI use t_(n-1), not Satterthwaite degrees of freedom. The full prediction pool includes labeled rows; the working variance and scan-level labeling design are evaluated empirically. Neither this nor the original subject-grouped split provides cluster-robust uncertainty for repeated visits.
+
+The final SBC diagnostic uses a labeled subset of the observed A pool. Its ranks and summaries are included with the manuscript. The K-bin sensitivity uses all available labels and quantile bins; its K=2 partition differs from the primary threshold of 0.5.
+
+The Jupyter notebooks under `notebooks/` preserve the supplied estimator code, have private row outputs removed, and use repository-relative paths. Their source hashes are recorded in `notebooks/PROVENANCE.json`. The SBC notebook archives the original separate-pool diagnostic; use `code/ppi/sbc.py` or `make sbc` for the corrected labeled-subset design and final reference diagnostics. The command-line Python scripts remain the main reproducibility entry points.

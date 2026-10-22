@@ -1,6 +1,6 @@
 project:
   name: bayesianppi-mri
-  analysis_version: tmlr-revision-2026
+  analysis_version: tmlr-camera-ready-2026-10-21
 
 autorater:
   seed: 42
@@ -12,6 +12,9 @@ autorater:
   learning_rate: 0.0001
   target_shape: [64, 64, 64]
   threshold: 0.5
+  preprocessing: resize_trilinear_then_per_volume_zscore
+  normalization_epsilon: 0.00001
+  loss: BCEWithLogitsLoss
 
 coverage:
   seed: 2025

@@ -1,6 +1,8 @@
-# Bayesian Chain-Rule Prediction-Powered Inference for Binary Prevalence Estimation
+# Conjugate Bayesian Chain-Rule Prediction-Powered Inference for Binary Prevalence Estimation
 
-Reproducibility repository for the TMLR manuscript **“Bayesian Chain-Rule Prediction-Powered Inference for Binary Prevalence Estimation.”**
+Reproducibility repository for the TMLR manuscript **“Conjugate Bayesian Chain-Rule Prediction-Powered Inference for Binary Prevalence Estimation.”**
+
+OpenReview: https://openreview.net/forum?id=75xIeUlse6
 
 This repository contains the conjugate Bayesian chain-rule estimator (CRE), comparison baselines, simulation-based calibration, K-bin sensitivity analyses, and the ADNI MRI case-study pipeline.
 
@@ -210,6 +212,15 @@ For a canonical disjoint labeled/unlabeled analysis using the maintained `ppi-py
 
 See `RESULTS.md` and `results/reference/` for summary-level manuscript values. Participant-level rows and identifiers are not included.
 
+Redraw the manuscript's Uniform-prior coverage/width panels and corrected SBC panels from the included aggregate outputs, without rerunning estimation:
+
+```bash
+python scripts/plot_uniform_coverage.py
+python scripts/plot_sbc_figures.py
+```
+
+These write PDF and PNG panels to `figs/paper/`. Both the full-cohort and age 65--70 width panels use the requested y-axis range 0.1--0.6, with ticks every 0.1. The full-cohort n=10 PPI width is approximately 0.626, above the visible range. The source CSVs and reported tables retain the complete values. `coverage_experiment.py` additionally generates both-prior diagnostic plots.
+
 Key QC values:
 
 | Scope | AUC | ACC at 0.5 | TPR | TNR |
@@ -232,3 +243,6 @@ The repository tracks code, schemas, synthetic fixtures, summary-level result ta
 ## Citation
 
 See `CITATION.cff`.
+
+
+See `CAMERA_READY_CHANGES.md` for the camera-ready export fix, notebook reconciliation, corrected SBC design, and figure-axis update.

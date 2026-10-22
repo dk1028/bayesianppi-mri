@@ -1,0 +1,38 @@
+[
+  {
+    "filename": "implementaion_coverage_all_for.ipynb",
+    "original_sha256": "da0e79abd62899cbdb531c4914d322e3f92f1667e78d91f10238dffc522bcd04",
+    "prepared_sha256": "7c6976066d82015e21da4c54c7685270b241ead1f3e7f29d33dc891d857e7c33",
+    "saved_outputs_removed": true,
+    "paths_repository_relative": true
+  },
+  {
+    "filename": "implementaion_coverage_all_6570_revised.ipynb",
+    "original_sha256": "6c6c2152b4af9f95ae783cd3286abe4efebf53a080f3876c4ab50f23cea28850",
+    "prepared_sha256": "d7b1290dfcb2b5858f6a0017da81d1dce27d4324844e2a005e06897949155897",
+    "saved_outputs_removed": true,
+    "paths_repository_relative": true
+  },
+  {
+    "filename": "sbc_revised.ipynb",
+    "original_sha256": "a0395c9aa08d3f43788b40ef8238e0f72ef69f98415ed28046528fc9bdf9a1c4",
+    "prepared_sha256": "2f80816d473aface761124a76355ac327d5a8dff7f1b42de95a33dd5dc8931fc",
+    "saved_outputs_removed": true,
+    "paths_repository_relative": true,
+    "archival_sbc_note_added": true
+  },
+  {
+    "filename": "k_chain_rule_revised.ipynb",
+    "original_sha256": "305861a40028efb231bc6eba592bd3f2a8e7ddd1e451256726b43cbb6162a710",
+    "prepared_sha256": "e5890d939ceee029682f8cc1d4c139c1f4c0dcd52214dc2711b214e33740db1b",
+    "saved_outputs_removed": true,
+    "paths_repository_relative": true
+  },
+  {
+    "filename": "delong_permutation_revised.ipynb",
+    "original_sha256": "56e9312f66b24fee38acf71070a1dabfbb82d3008b2d03908d5aa10da6b765be",
+    "prepared_sha256": "2650536ed229913293f02806790ee4b6f2a817a4bb56522531636b412ffaaef2",
+    "saved_outputs_removed": true,
+    "paths_repository_relative": true
+  }
+]

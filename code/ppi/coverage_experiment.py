@@ -203,8 +203,15 @@ def run_coverage_experiment(
     return result
 
 
-def make_uniform_summary(results: pd.DataFrame) -> pd.DataFrame:
-    sub = results[results["prior"] == "uniform"].sort_values("n_labels")
+def make_prior_summary(results: pd.DataFrame, prior: str) -> pd.DataFrame:
+    """Export one prior, rejecting absent or duplicated experimental rows."""
+    if prior not in {str(item["name"]) for item in PRIORS}:
+        raise ValueError(f"Unknown prior: {prior}")
+    sub = results[results["prior"] == prior].sort_values("n_labels")
+    if sub.empty:
+        raise ValueError(f"No results available for prior {prior}")
+    if sub["n_labels"].duplicated().any():
+        raise ValueError(f"Duplicated label budgets for prior {prior}")
     out = sub[
         [
             "n_labels",
@@ -220,7 +227,7 @@ def make_uniform_summary(results: pd.DataFrame) -> pd.DataFrame:
             "ppipp_w",
         ]
     ].copy()
-    return out.rename(
+    out = out.rename(
         columns={
             "n_labels": "n",
             "chain_cov": "CRE_cov",
@@ -234,7 +241,10 @@ def make_uniform_summary(results: pd.DataFrame) -> pd.DataFrame:
             "ppipp_cov": "PPIpp_cov",
             "ppipp_w": "PPIpp_w",
         }
-    )
+    ).reset_index(drop=True)
+    if not np.isfinite(out.to_numpy(dtype=float)).all():
+        raise ValueError(f"Non-finite results for prior {prior}")
+    return out
 
 
 def plot_dataset(results: pd.DataFrame, dataset_name: str, fig_dir: Path) -> None:
@@ -242,7 +252,7 @@ def plot_dataset(results: pd.DataFrame, dataset_name: str, fig_dir: Path) -> Non
     title = DISPLAY_NAME.get(dataset_name, dataset_name)
     prior_free = (
         sub.groupby("n_labels", as_index=False)[
-            ["ppi_cov", "ppi_w", "ppipp_cov", "ppipp_w"]
+            ["diff_cov", "diff_w", "ppi_cov", "ppi_w", "ppipp_cov", "ppipp_w"]
         ]
         .mean()
         .sort_values("n_labels")
@@ -258,7 +268,7 @@ def plot_dataset(results: pd.DataFrame, dataset_name: str, fig_dir: Path) -> Non
             "s--",
             label=f"Labeled-only ({prior})",
         )
-        plt.plot(psub["n_labels"], psub["diff_cov"], "d-.", label=f"Binary Diff ({prior})")
+    plt.plot(prior_free["n_labels"], prior_free["diff_cov"], "d-.", label="Binary difference")
     plt.plot(prior_free["n_labels"], prior_free["ppi_cov"], "^:", label="PPI")
     plt.plot(prior_free["n_labels"], prior_free["ppipp_cov"], "v:", label="PPI++")
     plt.axhline(0.95, linestyle="--", linewidth=1, label="Nominal 0.95")
@@ -283,11 +293,14 @@ def plot_dataset(results: pd.DataFrame, dataset_name: str, fig_dir: Path) -> Non
             "s--",
             label=f"Labeled-only ({prior})",
         )
-        plt.plot(psub["n_labels"], psub["diff_w"], "d-.", label=f"Binary Diff ({prior})")
+    plt.plot(prior_free["n_labels"], prior_free["diff_w"], "d-.", label="Binary difference")
     plt.plot(prior_free["n_labels"], prior_free["ppi_w"], "^:", label="PPI")
     plt.plot(prior_free["n_labels"], prior_free["ppipp_w"], "v:", label="PPI++")
     plt.xlabel("Number of labeled scans")
     plt.ylabel("Mean 95% interval width")
+    if dataset_name in {"full", "age_65_70"}:
+        plt.ylim(0.1, 0.6)
+        plt.yticks([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
     plt.title(f"Interval Width vs. Label Budget: {title}")
     plt.grid(True)
     plt.legend()
@@ -347,12 +360,13 @@ def main() -> None:
         index=False,
     )
 
-    make_uniform_summary(full_res).to_csv(
-        args.output_dir / "table_full_uniform_summary.csv", index=False
-    )
-    make_uniform_summary(age_res).to_csv(
-        args.output_dir / "table_6570_uniform_summary.csv", index=False
-    )
+    for prior in ["uniform", "jeffreys"]:
+        make_prior_summary(full_res, prior).to_csv(
+            args.output_dir / f"table_full_{prior}_summary.csv", index=False
+        )
+        make_prior_summary(age_res, prior).to_csv(
+            args.output_dir / f"table_6570_{prior}_summary.csv", index=False
+        )
 
     plot_dataset(combined, "full", fig_dir)
     plot_dataset(combined, "age_65_70", fig_dir)

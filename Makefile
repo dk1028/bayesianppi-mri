@@ -9,7 +9,7 @@ setup:
 	. .venv/bin/activate && python -m pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
 
 test:
-	pytest -q
+	$(PYTHON) -m pytest -q
 
 sbc-smoke:
 	$(PYTHON) code/ppi/sbc.py --output-dir /tmp/bayesianppi-sbc-smoke --M 20 --S 100 --NA 100 --NH 20 --priors uniform --seed 1

@@ -60,6 +60,8 @@ def set_seed(seed: int = SEED) -> None:
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 def resolve_nifti_path(path_str: str | Path) -> Path:
@@ -104,9 +106,8 @@ def crop_or_pad_to_cube(volume: np.ndarray) -> np.ndarray:
 
 
 def preprocess_volume(nifti_path: Path) -> torch.Tensor:
+    """Match the supplied subject-OOF notebook: resize, then z-score."""
     volume = nib.load(str(nifti_path)).get_fdata().astype(np.float32)
-    volume = crop_or_pad_to_cube(volume)
-    volume = _safe_minmax(volume)
     tensor = torch.from_numpy(volume).unsqueeze(0).unsqueeze(0)
     tensor = F.interpolate(
         tensor,
@@ -114,7 +115,8 @@ def preprocess_volume(nifti_path: Path) -> torch.Tensor:
         mode="trilinear",
         align_corners=False,
     )
-    return tensor.squeeze(0)
+    tensor = tensor.squeeze(0)
+    return (tensor - tensor.mean()) / (tensor.std() + 1e-5)
 
 
 class MRIDataset(Dataset):
@@ -147,7 +149,7 @@ class Simple3DCNN(nn.Module):
         x = self.pool(F.relu(self.conv2(x)))
         x = x.flatten(1)
         x = F.relu(self.fc1(x))
-        return torch.sigmoid(self.fc2(x)).squeeze(1)
+        return self.fc2(x).squeeze(1)
 
 
 @dataclass
@@ -193,7 +195,7 @@ def train_model(
     dl = DataLoader(ds, batch_size=batch_size, shuffle=True, num_workers=0)
 
     model = Simple3DCNN().to(device)
-    criterion = nn.BCELoss()
+    criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     losses: list[float] = []
@@ -229,7 +231,7 @@ def predict_df(
     preds: list[float] = []
     for x, _ in dl:
         x = x.to(device)
-        preds.extend(model(x).detach().cpu().numpy().tolist())
+        preds.extend(torch.sigmoid(model(x)).detach().cpu().numpy().tolist())
     return np.asarray(preds, dtype=float)
 
 
