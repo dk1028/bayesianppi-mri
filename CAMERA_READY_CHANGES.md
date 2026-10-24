@@ -9,3 +9,13 @@
 7. Include current PDF/PNG paper panels under `figs/paper/` and update the manuscript title and OpenReview link.
 
 The four coverage summary tables were reproduced from the original notebook's estimator and experiment cells on the supplied fixed OOF predictions. Full-precision Uniform outputs agree exactly with the old reference files. See REPRODUCIBILITY.md for checks and scope.
+
+## Alignment audit, 2026-10-24 (software 0.3.1)
+
+- Restore the original case-study AUC bootstrap seed offset `+999` for the exact age 65--70 subset. Primary reference CSV values are unchanged.
+- Pin scikit-learn to `1.5.1`, which reproduces the recorded subject-grouped CNN and threshold-audit folds; later versions can change those splits even at the same seed.
+- Make the additional subject-cluster bootstrap opt-in, preserving scan-level bootstrap as the manuscript analysis; retain the original `label_frac` column in the exchangeability summary.
+- Align auxiliary MRI figure scripts and prediction filenames with direct resize/z-score preprocessing and current subject-OOF outputs.
+- Add a manuscript `preferred-citation` without prematurely assigning final journal/DOI metadata, distinguish software and manuscript dates, and document licensing and archived artifacts.
+- Reconcile the manuscript-source tables with the full-precision references: five displayed rounding corrections, with no new estimates or changes to the reference CSVs.
+- Rebuild the TMLR supplementary code archive from a pinned repository revision, excluding archived manuscript and legacy code. Remove obsolete patch-application instructions from the submission package.

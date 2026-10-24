@@ -19,11 +19,13 @@ The authoritative TMLR revision workflow uses:
 |---|---:|
 | Autorater OOF | 42 |
 | Coverage and width | 2025 |
-| Case-study audits | 2025 |
+| Case-study audits | 2025; AUC scope offsets below |
 | K-bin sensitivity | 2025 |
 | SBC | 2025 |
 
-Every command writes a JSON configuration or embeds run settings in its result CSV.
+The case-study scan-level AUC bootstrap matches the original notebook: overall uses 2025; ages 50--73, 74--79, and 80--100 use 2026, 2027, and 2028; the exact age 65--70 subset uses 3024 (`2025 + 999`). The optional cluster bootstrap uses separate seeds and is not the source of manuscript AUC intervals.
+
+Each main analysis command writes a JSON configuration or embeds run settings in its result CSV. `configs/paper.yaml` is a readable settings record, not an automatically loaded configuration file.
 
 ## macOS hardware notes
 
@@ -47,7 +49,7 @@ Every command writes a JSON configuration or embeds run settings in its result C
 
 1. Subject grouping is enforced during CNN training and threshold-selection cross-validation.
 2. The manuscript repeated-labeling experiment samples labeled scan rows, matching the reported label-budget interpretation.
-3. The primary AUC confidence intervals reproduce the manuscript’s scan-level bootstrap. Researchers interested in within-subject dependence should additionally run a subject-cluster bootstrap sensitivity analysis.
+3. The primary AUC confidence intervals reproduce the manuscript’s scan-level bootstrap. Add `--cluster-bootstrap 2000` to `case_study_analysis.py` for a separate subject-cluster sensitivity analysis. It is skipped by default; the extra `AUC_cluster_*` columns are then empty.
 4. The pseudo-labeled versus unlabeled propensity analysis is a random-subsampling sanity check. It does not prove exchangeability under arbitrary real-world missingness.
 5. K-bin Dirichlet--Beta updates remain conjugate under the independent-bin specification.
 6. SBC validates computation under the assumed synthetic model, not the adequacy of the ADNI data-generating model.
@@ -61,11 +63,24 @@ pytest -q
 python code/ppi/sbc.py --output-dir /tmp/sbc-smoke --M 20 --S 100 --NA 100 --NH 20 --priors uniform --seed 1
 ```
 
-Then compare generated outputs to `results/reference/` with:
+After running the full repeated-labeling coverage command on the authorized OOF inputs, compare its four generated prior/cohort summary tables with:
 
 ```bash
 python scripts/check_reference_results.py --results-root results
 ```
+
+That command checks coverage summary exports; it does not compare every case-study, K-bin, or SBC file. See [results/reference/README.md](results/reference/README.md) for the reference-file map. Without ADNI inputs, `pytest -q` checks the public aggregate-to-summary exports and synthetic computations.
+
+## Fixed OOF inputs
+
+Exact downstream reproduction uses the supplied input rows in their original order. The following SHA-256 hashes identify those local-only inputs; the inputs themselves are not redistributed:
+
+| File | SHA-256 |
+| --- | --- |
+| `autorater_predictions_all_subject_oof_with_scan_age.csv` | `26f964357e7b8adb417a9e0e31b58290fc9c57874b847e4103853eabeda823cf` |
+| `autorater_predictions_6570_subject_oof_scan_age.csv` | `7595e736b0b37fe7b00795967db513f207f02ae60fd6e313cfceb7d0b5ef07b1` |
+
+Most installation requirements are version ranges, not a complete historical lockfile. scikit-learn is pinned to `1.5.1`: its subject-grouped fold assignments reproduce the original CNN OOF table and threshold audit, while `1.8.0` gives different folds for the same seed. `requirements-paper-oof.txt` lists versions explicitly recorded by the original MRI notebook. Re-training on other hardware, including MPS, is supported as a new run but is not guaranteed to reproduce the fixed OOF probabilities byte for byte.
 
 
 ## Camera-ready reconciliation (2026-10-21)

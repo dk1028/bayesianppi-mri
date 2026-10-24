@@ -1,10 +1,11 @@
 cff-version: 1.2.0
-message: "If you use this code, please cite the accompanying manuscript."
-title: "Conjugate Bayesian Chain-Rule Prediction-Powered Inference for Binary Prevalence Estimation"
+message: "Please cite the manuscript below for the method and identify the software version or commit used for reproduction."
+title: "BayesianPPI-MRI reproducibility code"
 type: software
-version: 0.3.0
-date-released: 2026-10-21
+version: 0.3.1
+date-released: 2026-10-24
 repository-code: "https://github.com/dk1028/bayesianppi-mri"
+url: "https://github.com/dk1028/bayesianppi-mri"
 authors:
   - family-names: Kim
     given-names: Dowoo
@@ -12,3 +13,13 @@ authors:
   - family-names: Steele
     given-names: Russell J.
 license: MIT
+preferred-citation:
+  type: unpublished
+  title: "Conjugate Bayesian Chain-Rule Prediction-Powered Inference for Binary Prevalence Estimation"
+  authors:
+    - family-names: Kim
+      given-names: Dowoo
+    - family-names: Steele
+      given-names: Russell J.
+  url: "https://openreview.net/forum?id=75xIeUlse6"
+  notes: "TMLR manuscript, OpenReview submission 9119. Final publication metadata will be added after camera-ready verification."

@@ -27,6 +27,13 @@ from _shared import Z975, load_prediction_csv, wilson_interval
 
 AGE_BINS = [50, 74, 80, 101]
 AGE_LABELS = ["50-73", "74-79", "80-100"]
+AUC_BOOTSTRAP_SEED_OFFSETS = {
+    "Overall": 0,
+    "50-73": 1,
+    "74-79": 2,
+    "80-100": 3,
+    "Age 65-70": 999,
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,11 +43,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input-csv", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--bootstrap", type=int, default=2000)
+    parser.add_argument(
+        "--cluster-bootstrap", type=int, default=0,
+        help="Optional subject-cluster bootstrap resamples; 0 skips this extra sensitivity analysis.",
+    )
     parser.add_argument("--permutations", type=int, default=5000)
     parser.add_argument("--threshold-bootstrap", type=int, default=2000)
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--seed", type=int, default=2025)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.cluster_bootstrap < 0:
+        parser.error("--cluster-bootstrap must be non-negative")
+    return args
 
 
 def binary_metrics(y_true: np.ndarray, score: np.ndarray, threshold: float) -> dict[str, float | int]:
@@ -318,6 +332,7 @@ def exchangeability_diagnostic(
                 "rep": rep,
                 "n_labeled": n_labeled,
                 "N": len(df),
+                "label_frac": 0.30,
                 "propensity_auc": float(roc_auc_score(y_test, pred)),
             }
         )
@@ -426,13 +441,15 @@ def main() -> None:
             sub["H"].to_numpy(),
             sub["A_prob"].to_numpy(),
             B=args.bootstrap,
-            seed=args.seed + scope_idx,
+            seed=args.seed + AUC_BOOTSTRAP_SEED_OFFSETS[scope],
         )
-        _, cluster_lo, cluster_hi = cluster_bootstrap_auc_ci(
-            sub,
-            B=args.bootstrap,
-            seed=args.seed + 1000 + scope_idx,
-        )
+        cluster_lo = cluster_hi = np.nan
+        if args.cluster_bootstrap:
+            _, cluster_lo, cluster_hi = cluster_bootstrap_auc_ci(
+                sub,
+                B=args.cluster_bootstrap,
+                seed=args.seed + 1000 + scope_idx,
+            )
         fixed = binary_metrics(sub["H"].to_numpy(), sub["A_prob"].to_numpy(), args.threshold)
         metrics_rows.append(
             {
@@ -595,6 +612,11 @@ def main() -> None:
         "subjects": int(df["subject_id"].nunique()),
         "subjects_spanning_multiple_oof_folds": int((fold_counts > 1).sum()),
         "bootstrap": args.bootstrap,
+        "auc_bootstrap_seeds": {
+            scope: args.seed + offset
+            for scope, offset in AUC_BOOTSTRAP_SEED_OFFSETS.items()
+        },
+        "cluster_bootstrap": args.cluster_bootstrap,
         "permutations": args.permutations,
         "threshold_bootstrap": args.threshold_bootstrap,
         "threshold": args.threshold,

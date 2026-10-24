@@ -80,9 +80,9 @@ The Holm-adjusted age-bin permutation comparison was significant for 50--73 vers
 
 ## K-bin sensitivity
 
-Full-cohort posterior means changed by at most approximately `0.0005` for K=4 or K=5 versus K=2. In the smaller age 65--70 subset, the largest shift was `0.0050` under the Uniform prior. Interval widths stayed within approximately 3% of the K=2 reference.
+Full-cohort posterior means changed by at most `0.0005196534` for K=4 or K=5 versus K=2 (approximately `5.2e-4`); the largest full-cohort width change was about 2.32%. In the smaller age 65--70 subset, the largest mean shift was `0.0049996109` under the Uniform prior and the largest absolute width change was about 3.08%.
 
-See `results/reference/kbin_paper_summary.csv`.
+See `results/reference/kbin_paper_summary_revised.csv` for full precision and `results/reference/kbin_paper_summary.csv` for the rounded manuscript presentation.
 
 ## Corrected simulation-based calibration
 

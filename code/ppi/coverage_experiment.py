@@ -270,7 +270,7 @@ def plot_dataset(results: pd.DataFrame, dataset_name: str, fig_dir: Path) -> Non
         )
     plt.plot(prior_free["n_labels"], prior_free["diff_cov"], "d-.", label="Binary difference")
     plt.plot(prior_free["n_labels"], prior_free["ppi_cov"], "^:", label="PPI")
-    plt.plot(prior_free["n_labels"], prior_free["ppipp_cov"], "v:", label="PPI++")
+    plt.plot(prior_free["n_labels"], prior_free["ppipp_cov"], "v:", label="Power-tuned PPI")
     plt.axhline(0.95, linestyle="--", linewidth=1, label="Nominal 0.95")
     plt.ylim(0.3, 1.05)
     plt.xlabel("Number of labeled scans")
@@ -295,7 +295,7 @@ def plot_dataset(results: pd.DataFrame, dataset_name: str, fig_dir: Path) -> Non
         )
     plt.plot(prior_free["n_labels"], prior_free["diff_w"], "d-.", label="Binary difference")
     plt.plot(prior_free["n_labels"], prior_free["ppi_w"], "^:", label="PPI")
-    plt.plot(prior_free["n_labels"], prior_free["ppipp_w"], "v:", label="PPI++")
+    plt.plot(prior_free["n_labels"], prior_free["ppipp_w"], "v:", label="Power-tuned PPI")
     plt.xlabel("Number of labeled scans")
     plt.ylabel("Mean 95% interval width")
     if dataset_name in {"full", "age_65_70"}:

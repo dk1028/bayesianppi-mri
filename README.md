@@ -23,11 +23,11 @@ The earlier analysis snapshot is archived under `code/legacy/pre_tmlr_update_202
 
 The main binary chain-rule estimand is
 
-\[
+$$
 g = P(H=1)
   = P(A=1)P(H=1\mid A=1)
   + P(A=0)P(H=1\mid A=0),
-\]
+$$
 
 where:
 
@@ -92,7 +92,7 @@ bayesianppi-mri/
 
 ## Installation
 
-The following commands create a Python 3.11 virtual environment on macOS or Linux:
+Use Python 3.11, as in CI. The following commands assume `python3` resolves to that version:
 
 ```bash
 python3 -m venv .venv
@@ -102,6 +102,8 @@ pip install -r requirements.txt
 ```
 
 Apple Silicon users can use PyTorch’s MPS backend automatically when available. The autorater code selects devices in this order: CUDA, MPS, CPU.
+
+scikit-learn is pinned to `1.5.1` because later releases can change subject-grouped fold assignments at the same seed. Exact downstream checks use the fixed OOF inputs identified in [REPRODUCIBILITY.md](REPRODUCIBILITY.md).
 
 Run the lightweight test suite:
 
@@ -197,6 +199,8 @@ python code/ppi/case_study_analysis.py \
 
 This script replaces the historically named `delong_permutation.ipynb`. The reported age-bin comparison is a permutation test, not a DeLong test.
 
+The exact age 65--70 AUC bootstrap uses seed `2025 + 999`, matching the original notebook. The reported primary AUC intervals use scan-level bootstrap. Add `--cluster-bootstrap 2000` for an additional subject-cluster sensitivity analysis; it is skipped by default and does not replace the manuscript intervals.
+
 #### Step 5: K-bin sensitivity
 
 ```bash
@@ -219,7 +223,7 @@ For a canonical disjoint labeled/unlabeled analysis using the maintained `ppi-py
 
 ## Reference results
 
-See `RESULTS.md` and `results/reference/` for summary-level manuscript values. Participant-level rows and identifiers are not included.
+See [RESULTS.md](RESULTS.md) and [results/reference/README.md](results/reference/README.md) for summary-level manuscript values and the role of each CSV. Participant-level rows and identifiers are not included.
 
 Redraw the manuscript's Uniform-prior coverage/width panels and corrected SBC panels from the included aggregate outputs, without rerunning estimation:
 
@@ -251,7 +255,16 @@ The repository tracks code, sanitized notebook sources, schemas, synthetic fixtu
 
 ## Citation
 
-See `CITATION.cff`.
+See [CITATION.cff](CITATION.cff). Its `preferred-citation` points to the manuscript, while the top-level record describes software version `0.3.1`. The software release date is not a manuscript publication date. Final journal/DOI metadata will be added after camera-ready verification.
 
+## Configuration and artifact versions
 
-See `CAMERA_READY_CHANGES.md` for the camera-ready export fix, notebook reconciliation, corrected SBC design, and figure-axis update.
+[configs/paper.yaml](configs/paper.yaml) records the manuscript settings; scripts receive their settings through the explicit command-line arguments shown above and do not automatically load the YAML file. [REPRODUCIBILITY.md](REPRODUCIBILITY.md) records input hashes, seed offsets, and scope limits. [notebooks/README.md](notebooks/README.md) distinguishes the supplied notebooks from the current command-line implementation.
+
+The code-only TMLR supplementary ZIP includes current analysis code, documentation, tests, sanitized notebooks, aggregate references, and paper panels. It omits the archived manuscript PDF and `code/legacy/`; its `ARTIFACT_MANIFEST.json` pins the GitHub commit and hashes every included file. Keep the current manuscript PDF separate from that code ZIP. The Overleaf source ZIP is a separate editing bundle.
+
+## Licensing
+
+The software is released under the [MIT license](LICENSE). The manuscript is governed by its own license; TMLR submissions use [CC BY 4.0](https://jmlr.org/tmlr/author-guide.html). ADNI images, participant-level metadata, and private prediction tables are excluded from the software release and remain subject to the ADNI Data Use Agreement.
+
+See [CAMERA_READY_CHANGES.md](CAMERA_READY_CHANGES.md) for the reconciliation history.
