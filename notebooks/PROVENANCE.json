@@ -9,30 +9,36 @@
   {
     "filename": "implementaion_coverage_all_6570_revised.ipynb",
     "original_sha256": "6c6c2152b4af9f95ae783cd3286abe4efebf53a080f3876c4ab50f23cea28850",
-    "prepared_sha256": "d7b1290dfcb2b5858f6a0017da81d1dce27d4324844e2a005e06897949155897",
+    "prepared_sha256": "8b13564befcad66d2a156bd2bb69c07b07954de0148f0e9de48fd17a7a12c8a4",
     "saved_outputs_removed": true,
-    "paths_repository_relative": true
+    "paths_repository_relative": true,
+    "manuscript_drafting_cells_removed": 1,
+    "descriptive_comments_and_docstrings": true
   },
   {
     "filename": "sbc_revised.ipynb",
     "original_sha256": "a0395c9aa08d3f43788b40ef8238e0f72ef69f98415ed28046528fc9bdf9a1c4",
-    "prepared_sha256": "2f80816d473aface761124a76355ac327d5a8dff7f1b42de95a33dd5dc8931fc",
+    "prepared_sha256": "db682b5660fb3dd601e2c800a3522758a953cbb3becff389cd91775b65fcb10d",
     "saved_outputs_removed": true,
     "paths_repository_relative": true,
-    "archival_sbc_note_added": true
+    "archival_sbc_note_added": true,
+    "manuscript_drafting_cells_removed": 1
   },
   {
     "filename": "k_chain_rule_revised.ipynb",
     "original_sha256": "305861a40028efb231bc6eba592bd3f2a8e7ddd1e451256726b43cbb6162a710",
-    "prepared_sha256": "e5890d939ceee029682f8cc1d4c139c1f4c0dcd52214dc2711b214e33740db1b",
+    "prepared_sha256": "415559a91f1ad74a41673a84f1e7902acf32b8ba9f9f24889abbf70608a07ba8",
     "saved_outputs_removed": true,
-    "paths_repository_relative": true
+    "paths_repository_relative": true,
+    "manuscript_drafting_cells_removed": 1
   },
   {
     "filename": "delong_permutation_revised.ipynb",
     "original_sha256": "56e9312f66b24fee38acf71070a1dabfbb82d3008b2d03908d5aa10da6b765be",
-    "prepared_sha256": "2650536ed229913293f02806790ee4b6f2a817a4bb56522531636b412ffaaef2",
+    "prepared_sha256": "36a38e5d5924d6d19930256aa9e0e90bf24fc4f838d730d13c4582edca9e66d2",
     "saved_outputs_removed": true,
-    "paths_repository_relative": true
+    "paths_repository_relative": true,
+    "manuscript_drafting_cells_removed": 1,
+    "descriptive_comments_and_docstrings": true
   }
 ]

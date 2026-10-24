@@ -16,6 +16,12 @@ The four coverage summary tables were reproduced from the original notebook's es
 - Pin scikit-learn to `1.5.1`, which reproduces the recorded subject-grouped CNN and threshold-audit folds; later versions can change those splits even at the same seed.
 - Make the additional subject-cluster bootstrap opt-in, preserving scan-level bootstrap as the manuscript analysis; retain the original `label_frac` column in the exchangeability summary.
 - Align auxiliary MRI figure scripts and prediction filenames with direct resize/z-score preprocessing and current subject-OOF outputs.
-- Add a manuscript `preferred-citation` without prematurely assigning final journal/DOI metadata, distinguish software and manuscript dates, and document licensing and archived artifacts.
+- Add a manuscript `preferred-citation` without prematurely assigning final journal/DOI metadata, distinguish software and manuscript dates, and document licensing and notebook provenance.
 - Reconcile the manuscript-source tables with the full-precision references: five displayed rounding corrections, with no new estimates or changes to the reference CSVs.
-- Rebuild the TMLR supplementary code archive from a pinned repository revision, excluding archived manuscript and legacy code. Remove obsolete patch-application instructions from the submission package.
+- Rebuild the TMLR supplementary code archive from a pinned repository revision, excluding legacy code.
+
+## Repository packaging, 2026-10-24
+
+- Remove the historical manuscript snapshot and its folder; retain the OpenReview manuscript link.
+- Remove manuscript-drafting Markdown cells from four source notebooks and normalize two explanatory comments/docstrings. Estimator computations and numerical outputs are unchanged.
+- Update notebook provenance hashes and documentation to match the distributed files.

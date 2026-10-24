@@ -78,8 +78,6 @@ bayesianppi-mri/
 ├── environment.yml
 ├── figs/paper/
 ├── notebooks/ (sanitized source notebooks)
-├── paper/
-│   └── tmlr_bayesianppi_arxiv.pdf
 ├── requirements-ci.txt
 ├── requirements-paper-oof.txt
 ├── requirements.txt
@@ -88,7 +86,7 @@ bayesianppi-mri/
 └── tests/
 ```
 
-`paper/tmlr_bayesianppi_arxiv.pdf` is the archived anonymous submission snapshot. It predates the camera-ready analysis and figures described here; use the OpenReview link at the top for the current manuscript.
+The manuscript is available through the OpenReview link above. The submission PDF is maintained separately from this code repository.
 
 ## Installation
 
@@ -232,7 +230,7 @@ python scripts/plot_uniform_coverage.py
 python scripts/plot_sbc_figures.py
 ```
 
-These write PDF and PNG panels to `figs/paper/`. Both the full-cohort and age 65--70 width panels use the requested y-axis range 0.1--0.6, with ticks every 0.1. The full-cohort n=10 PPI width is approximately 0.626, above the visible range. The source CSVs and reported tables retain the complete values. `coverage_experiment.py` additionally generates both-prior diagnostic plots.
+These write PDF and PNG panels to `figs/paper/`. Both the full-cohort and age 65--70 width panels use a y-axis range 0.1--0.6, with ticks every 0.1. The full-cohort n=10 PPI width is approximately 0.626, above the visible range. The source CSVs and reported tables retain the complete values. `coverage_experiment.py` additionally generates both-prior diagnostic plots.
 
 Key QC values:
 
@@ -251,7 +249,7 @@ Do not commit any of the following:
 - DICOM or NIfTI files,
 - row-level OOF prediction tables.
 
-The repository tracks code, sanitized notebook sources, schemas, synthetic fixtures, summary-level results, figures, and the archived anonymous submission PDF. Participant-level data stay local and are ignored by Git.
+The repository tracks code, sanitized notebook sources, schemas, synthetic fixtures, summary-level results, and figures. Participant-level data stay local and are ignored by Git.
 
 ## Citation
 
@@ -261,7 +259,7 @@ See [CITATION.cff](CITATION.cff). Its `preferred-citation` points to the manuscr
 
 [configs/paper.yaml](configs/paper.yaml) records the manuscript settings; scripts receive their settings through the explicit command-line arguments shown above and do not automatically load the YAML file. [REPRODUCIBILITY.md](REPRODUCIBILITY.md) records input hashes, seed offsets, and scope limits. [notebooks/README.md](notebooks/README.md) distinguishes the supplied notebooks from the current command-line implementation.
 
-The code-only TMLR supplementary ZIP includes current analysis code, documentation, tests, sanitized notebooks, aggregate references, and paper panels. It omits the archived manuscript PDF and `code/legacy/`; its `ARTIFACT_MANIFEST.json` pins the GitHub commit and hashes every included file. Keep the current manuscript PDF separate from that code ZIP. The Overleaf source ZIP is a separate editing bundle.
+The code-only TMLR supplementary ZIP includes current analysis code, documentation, tests, sanitized notebooks, aggregate references, and paper panels. It omits `code/legacy/`; its `ARTIFACT_MANIFEST.json` pins the GitHub commit and hashes every included file. Keep the current manuscript PDF separate from that code ZIP. The Overleaf source ZIP is a separate editing bundle.
 
 ## Licensing
 

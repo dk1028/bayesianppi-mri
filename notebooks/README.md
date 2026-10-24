@@ -1,6 +1,6 @@
 # Notebook roles and provenance
 
-The command-line scripts in `code/` are the supported reproduction entry points. These notebooks preserve the supplied source analyses with saved outputs removed and paths made repository-relative. Original and prepared SHA-256 hashes are recorded in [PROVENANCE.json](PROVENANCE.json).
+The command-line scripts in `code/` are the supported reproduction entry points. These notebooks preserve the source analyses with saved outputs removed, paths made repository-relative, and manuscript-drafting Markdown cells omitted. Explanatory comments and docstrings use descriptive wording. Original and prepared SHA-256 hashes are recorded in [PROVENANCE.json](PROVENANCE.json).
 
 | Notebook | Role | Current manuscript entry point |
 | --- | --- | --- |
