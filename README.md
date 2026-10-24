@@ -17,7 +17,7 @@ The manuscript revision uses one authoritative analysis pipeline:
 5. Compare CRE with labeled-only Bayes, the binary difference estimator, continuous-score PPI, and the power-tuned PPI++-style baseline used in the manuscript.
 6. Run the revised case-study audits, K-bin sensitivity analysis, and SBC diagnostics.
 
-Legacy scripts from the earlier workflow are moved to `code/legacy/` by the supplied update script. They are retained for history but are **not used** for manuscript results.
+The earlier analysis snapshot is archived under `code/legacy/pre_tmlr_update_20260707_132640/`. The reproduction commands below use the current scripts; the archived scripts are retained for history and are not used for the manuscript results.
 
 ## Estimands and baselines
 
@@ -42,24 +42,23 @@ CRE and the binary difference estimator use the thresholded decision `A`. Contin
 
 ```text
 bayesianppi-mri/
+├── .github/workflows/tests.yml
+├── .gitignore
+├── CAMERA_READY_CHANGES.md
+├── CITATION.cff
+├── LICENSE
+├── Makefile
 ├── README.md
 ├── README_DATA.md
 ├── REPRODUCIBILITY.md
 ├── RESULTS.md
-├── CITATION.cff
-├── requirements.txt
-├── requirements-ci.txt
-├── environment.yml
-├── Makefile
-├── configs/
-│   └── paper.yaml
 ├── code/
 │   ├── autorater/
 │   │   ├── _shared.py
 │   │   ├── fold_utils.py
 │   │   ├── train_subject_oof.py
 │   │   ├── change_dicom.py
-│   │   └── process_all.py
+│   │   └── ... (figure and data-conversion utilities)
 │   ├── data/
 │   │   └── attach_scan_age.py
 │   ├── ppi/
@@ -68,22 +67,32 @@ bayesianppi-mri/
 │   │   ├── case_study_analysis.py
 │   │   ├── k_chain_rule.py
 │   │   ├── sbc.py
-│   │   ├── histogram_posterior.py
-│   │   └── prior_predictive_checks.py
+│   │   └── ... (standalone diagnostic scripts)
 │   └── legacy/
+│       └── pre_tmlr_update_20260707_132640/
+├── configs/paper.yaml
 ├── data/
 │   ├── README_DATA.md
 │   └── example/
 │       └── synthetic_oof_example.csv
-├── results/
-│   └── reference/
-├── tests/
-└── paper/
+├── environment.yml
+├── figs/paper/
+├── notebooks/ (sanitized source notebooks)
+├── paper/
+│   └── tmlr_bayesianppi_arxiv.pdf
+├── requirements-ci.txt
+├── requirements-paper-oof.txt
+├── requirements.txt
+├── results/reference/
+├── scripts/
+└── tests/
 ```
 
-## macOS installation
+`paper/tmlr_bayesianppi_arxiv.pdf` is the archived anonymous submission snapshot. It predates the camera-ready analysis and figures described here; use the OpenReview link at the top for the current manuscript.
 
-Tested commands for Terminal on macOS:
+## Installation
+
+The following commands create a Python 3.11 virtual environment on macOS or Linux:
 
 ```bash
 python3 -m venv .venv
@@ -238,7 +247,7 @@ Do not commit any of the following:
 - DICOM or NIfTI files,
 - row-level OOF prediction tables.
 
-The repository tracks code, schemas, synthetic fixtures, summary-level result tables, and figures only.
+The repository tracks code, sanitized notebook sources, schemas, synthetic fixtures, summary-level results, figures, and the archived anonymous submission PDF. Participant-level data stay local and are ignored by Git.
 
 ## Citation
 

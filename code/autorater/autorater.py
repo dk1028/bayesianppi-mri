@@ -5,7 +5,7 @@ from pathlib import Path
 from _shared import RESULTS_ROOT, FIGS_ROOT
 from _viz_examples import create_example_figure
 
-pred_csv = RESULTS_ROOT / "autorater" / "autorater_predictions_all.csv"
+pred_csv = RESULTS_ROOT / "autorater" / "autorater_predictions_all_subject_oof.csv"
 out_path = FIGS_ROOT / "fig_autorater_examples.png"
 create_example_figure(
     pred_csv=pred_csv,
